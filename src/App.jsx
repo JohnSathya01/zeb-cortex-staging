@@ -14,6 +14,8 @@ import ProgressMonitoringPage from './pages/leadership/ProgressMonitoringPage.js
 import AssessmentEditorPage from './pages/leadership/AssessmentEditorPage.jsx';
 import ChatListPage from './pages/leadership/ChatListPage.jsx';
 import ReviewerManagementPage from './pages/leadership/ReviewerManagementPage.jsx';
+import AnalyticsDashboardPage from './pages/leadership/AnalyticsDashboardPage.jsx';
+import CohortManagementPage from './pages/leadership/CohortManagementPage.jsx';
 import LearnerDashboardPage from './pages/learner/LearnerDashboardPage.jsx';
 import CourseDetailPage from './pages/learner/CourseDetailPage.jsx';
 import ChapterViewPage from './pages/learner/ChapterViewPage.jsx';
@@ -55,6 +57,8 @@ function AppRoutes() {
               <Route path="courses/:courseId/chapters/:chapterId/assessments" element={<AssessmentEditorPage />} />
               <Route path="chats" element={<ChatListPage />} />
               <Route path="reviewers" element={<ReviewerManagementPage />} />
+              <Route path="analytics" element={<AnalyticsDashboardPage />} />
+              <Route path="cohorts" element={<CohortManagementPage />} />
             </Route>
           </Route>
         </Route>

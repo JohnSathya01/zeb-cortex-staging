@@ -62,14 +62,33 @@ export default function CourseAssignmentPage() {
     }
   }
 
-  async function handleAssign(learnerId) {
-    if (!selectedCourseId) return;
+  const [deadlineModal, setDeadlineModal] = useState(null); // { learnerId }
+  const [deadlineDate, setDeadlineDate] = useState('');
+
+  function openDeadlineModal(learnerId) {
+    setDeadlineModal({ learnerId });
+    setDeadlineDate('');
     setMessage(null);
+  }
+
+  function closeDeadlineModal() {
+    setDeadlineModal(null);
+    setDeadlineDate('');
+  }
+
+  async function handleAssignWithDeadline() {
+    if (!deadlineModal || !selectedCourseId) return;
     try {
-      await createAssignmentRecord(learnerId, selectedCourseId);
+      await createAssignmentRecord(
+        deadlineModal.learnerId,
+        selectedCourseId,
+        deadlineDate || null
+      );
       await loadData();
+      closeDeadlineModal();
     } catch (err) {
       setMessage(err.error || 'Course already assigned to this learner');
+      closeDeadlineModal();
     }
   }
 
@@ -232,16 +251,23 @@ export default function CourseAssignmentPage() {
                       </td>
                       <td>
                         {assignment ? (
-                          <button
-                            className="btn btn-danger btn-sm"
-                            onClick={() => handleUnassign(assignment.id)}
-                          >
-                            Unassign
-                          </button>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <button
+                              className="btn btn-danger btn-sm"
+                              onClick={() => handleUnassign(assignment.id)}
+                            >
+                              Unassign
+                            </button>
+                            {assignment.targetCompletionDate && (
+                              <span className="overdue-badge" style={{ fontSize: '11px' }}>
+                                Due {new Date(assignment.targetCompletionDate).toLocaleDateString()}
+                              </span>
+                            )}
+                          </div>
                         ) : (
                           <button
                             className="btn btn-primary btn-sm"
-                            onClick={() => handleAssign(learner.id)}
+                            onClick={() => openDeadlineModal(learner.id)}
                           >
                             Assign
                           </button>
@@ -255,6 +281,31 @@ export default function CourseAssignmentPage() {
           )}
         </div>
       </div>
+      {/* Deadline Modal */}
+      {deadlineModal && (
+        <div className="confirm-overlay" onClick={closeDeadlineModal}>
+          <div className="confirm-dialog" onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ marginBottom: '16px' }}>Set Deadline (optional)</h3>
+            <div className="form-group">
+              <label htmlFor="deadline-date">Target Completion Date</label>
+              <input
+                id="deadline-date"
+                type="date"
+                value={deadlineDate}
+                onChange={(e) => setDeadlineDate(e.target.value)}
+                min={new Date().toISOString().split('T')[0]}
+              />
+              <div style={{ fontSize: '12px', color: 'var(--gray-500)', marginTop: '4px' }}>
+                Leave blank to assign without a deadline.
+              </div>
+            </div>
+            <div className="form-actions">
+              <button className="btn btn-secondary" onClick={closeDeadlineModal}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleAssignWithDeadline}>Assign</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

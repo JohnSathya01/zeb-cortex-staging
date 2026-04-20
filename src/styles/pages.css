@@ -1009,3 +1009,322 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* ===== Analytics Dashboard ===== */
+.analytics-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 16px;
+  margin-bottom: 36px;
+}
+
+.analytics-stat-card {
+  background: #fff;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.analytics-stat-card.accent {
+  background: var(--primary-50, #eff6ff);
+  border-color: var(--primary-200, #bfdbfe);
+}
+
+.analytics-stat-card.warn {
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+
+.analytics-stat-value {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--gray-900);
+  line-height: 1;
+}
+
+.analytics-stat-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.analytics-mini-bar {
+  height: 4px;
+  background: var(--gray-200);
+  border-radius: 99px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.analytics-mini-bar-fill {
+  height: 100%;
+  background: var(--primary-500, #3b82f6);
+  border-radius: 99px;
+  transition: width 0.6s ease;
+}
+
+.analytics-section-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--gray-800);
+  margin: 0 0 16px;
+}
+
+.analytics-course-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+  margin-bottom: 36px;
+}
+
+.analytics-course-card {
+  background: #fff;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.analytics-course-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.analytics-course-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--gray-900);
+}
+
+.analytics-course-id {
+  font-size: 11px;
+  color: var(--gray-400);
+  font-family: monospace;
+  white-space: nowrap;
+}
+
+.analytics-bar-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--gray-600);
+  font-weight: 500;
+}
+
+.analytics-bar-pct {
+  font-weight: 700;
+  color: var(--gray-800);
+}
+
+.analytics-bar-track {
+  height: 6px;
+  background: var(--gray-100);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.analytics-bar-fill {
+  height: 100%;
+  background: var(--primary-500, #3b82f6);
+  border-radius: 99px;
+  transition: width 0.6s ease;
+}
+
+.analytics-bar-fill.score {
+  background: #10b981;
+}
+
+.analytics-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.analytics-pill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 99px;
+}
+
+.analytics-pill.total      { background: var(--gray-100); color: var(--gray-600); }
+.analytics-pill.completed  { background: #d1fae5; color: #065f46; }
+.analytics-pill.progress   { background: #dbeafe; color: #1e40af; }
+.analytics-pill.not-started { background: var(--gray-100); color: var(--gray-500); }
+.analytics-pill.overdue    { background: #fee2e2; color: #991b1b; }
+
+.analytics-spec-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 36px;
+}
+
+.analytics-spec-card {
+  background: #fff;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+}
+
+.analytics-spec-count {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--gray-900);
+}
+
+.analytics-spec-name {
+  font-size: 13px;
+  color: var(--gray-600);
+  margin-top: 4px;
+}
+
+/* ===== Cohort Management ===== */
+.cohort-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cohort-card {
+  background: #fff;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+}
+
+.cohort-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.cohort-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--gray-900);
+}
+
+.cohort-desc {
+  font-size: 13px;
+  color: var(--gray-500);
+  margin-top: 4px;
+}
+
+.cohort-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.cohort-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gray-500);
+  background: var(--gray-100);
+  padding: 3px 10px;
+  border-radius: 99px;
+}
+
+.cohort-toggle-btn {
+  background: none;
+  border: none;
+  color: var(--primary-600, #2563eb);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 6px 0 0;
+  text-decoration: underline;
+}
+
+.cohort-members {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.cohort-member-pill {
+  background: var(--gray-100);
+  color: var(--gray-700);
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 99px;
+  font-weight: 500;
+}
+
+/* Cohort modal */
+.cohort-modal {
+  max-width: 520px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.cohort-member-list {
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  max-height: 240px;
+  overflow-y: auto;
+  margin-top: 6px;
+}
+
+.cohort-member-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--gray-100);
+  transition: background 0.1s;
+}
+
+.cohort-member-row:last-child {
+  border-bottom: none;
+}
+
+.cohort-member-row:hover,
+.cohort-member-row.checked {
+  background: var(--primary-50, #eff6ff);
+}
+
+.cohort-member-row input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--primary-600, #2563eb);
+  flex-shrink: 0;
+}
+
+.cohort-member-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--gray-800);
+  flex: 1;
+}
+
+.cohort-member-spec {
+  font-size: 11px;
+  color: var(--gray-400);
+}
+
+.cohort-selected-count {
+  font-size: 12px;
+  color: var(--gray-500);
+  margin-top: 6px;
+  text-align: right;
+}

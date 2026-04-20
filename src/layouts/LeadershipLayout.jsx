@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import NotificationBell from '../components/NotificationBell.jsx';
-import { IconDashboard, IconUsers, IconBook, IconClipboard, IconChart, IconChat, IconShield, IconLogout } from '../components/Icons.jsx';
+import { IconDashboard, IconUsers, IconBook, IconClipboard, IconChart, IconChat, IconShield, IconLogout, IconAnalytics, IconCohort } from '../components/Icons.jsx';
 import '../styles/layout.css';
 
 const navItems = [
@@ -11,6 +11,8 @@ const navItems = [
   { to: '/leadership/assign', label: 'Course Assignment', Icon: IconClipboard },
   { to: '/leadership/reviewers', label: 'Reviewer Management', Icon: IconShield },
   { to: '/leadership/progress', label: 'Progress Monitoring', Icon: IconChart },
+  { to: '/leadership/cohorts', label: 'Cohorts', Icon: IconCohort },
+  { to: '/leadership/analytics', label: 'Analytics', Icon: IconAnalytics },
   { to: '/leadership/chats', label: 'Chats', Icon: IconChat },
 ];
 
