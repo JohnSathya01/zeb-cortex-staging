@@ -1,0 +1,5 @@
+{
+  "id": "nmt-course-001",
+  "title": "Neural Machine Translation",
+  "description": "A comprehensive 13-chapter course covering the foundations of neural machine translation — from tokenization and transformer architectures to inference engines, quantization, and production deployment."
+}

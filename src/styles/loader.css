@@ -1,0 +1,185 @@
+/* ===== App Loader ===== */
+.app-loader {
+  position: fixed;
+  inset: 0;
+  background: #f5f4f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  overflow: hidden;
+}
+
+/* Faded background image */
+.app-loader::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url('/login-bg.jpg');
+  background-size: cover;
+  background-position: center;
+  opacity: 0.12;
+  z-index: 0;
+}
+
+.loader-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  animation: fadeIn 0.4s ease-out;
+}
+
+.loader-brand {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.8px;
+  color: #1a1a1a;
+}
+
+/* ── Emblem: spinner rings orbiting the zeb mark ── */
+.loader-emblem {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Shared ring base — sized by their container */
+.loader-emblem .spinner-ring {
+  position: absolute;
+  inset: 0;
+  border: 3px solid transparent;
+  border-top-color: #b5d44f;
+  border-radius: 50%;
+  animation: spin 1s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+}
+
+.loader-emblem .spinner-ring.ring-2 {
+  inset: 8px;
+  border-top-color: #1a1a1a;
+  animation-delay: -0.15s;
+  animation-duration: 1.2s;
+}
+
+.loader-emblem .spinner-ring.ring-3 {
+  inset: 16px;
+  border-top-color: #9bbf38;
+  animation-delay: -0.3s;
+  animation-duration: 0.9s;
+}
+
+/* Zeb triangle mark — sits centered inside the rings */
+.zeb-mark {
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  z-index: 1;
+  animation: zebPulse 2.4s ease-in-out infinite;
+}
+
+@keyframes zebPulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 3px rgba(181, 212, 79, 0.25));
+    transform: scale(1);
+  }
+  50% {
+    filter: drop-shadow(0 0 10px rgba(181, 212, 79, 0.65));
+    transform: scale(1.05);
+  }
+}
+
+/* Legacy standalone spinner (kept for backwards compat) */
+.loader-spinner {
+  position: relative;
+  width: 56px;
+  height: 56px;
+}
+
+.spinner-ring {
+  position: absolute;
+  inset: 0;
+  border: 3px solid transparent;
+  border-top-color: #b5d44f;
+  border-radius: 50%;
+  animation: spin 1s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+}
+
+.spinner-ring.ring-2 {
+  inset: 6px;
+  border-top-color: #1a1a1a;
+  animation-delay: -0.15s;
+  animation-duration: 1.2s;
+}
+
+.spinner-ring.ring-3 {
+  inset: 12px;
+  border-top-color: #9bbf38;
+  animation-delay: -0.3s;
+  animation-duration: 0.9s;
+}
+
+.loader-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: #7c83a1;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+}
+
+.loader-dots {
+  display: flex;
+  gap: 6px;
+  margin-top: -8px;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #1a1a1a;
+  animation: dotBounce 1.2s ease-in-out infinite;
+}
+
+.dot.dot-2 { animation-delay: 0.15s; }
+.dot.dot-3 { animation-delay: 0.3s; }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes dotBounce {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1.2); }
+}
+
+.loader-powered {
+  font-size: 12px;
+  color: #565b73;
+  letter-spacing: 0.5px;
+  margin-top: -12px;
+}
+
+.loader-powered span {
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+/* ===== Page-level inline loader ===== */
+.page-loader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 0;
+  width: 100%;
+}
+
+.page-loader-spinner {
+  position: relative;
+  width: 44px;
+  height: 44px;
+}

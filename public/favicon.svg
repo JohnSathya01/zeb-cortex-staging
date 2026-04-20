@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Rounded square background -->
+  <rect width="32" height="32" rx="6" ry="6" fill="#f5f4f0"/>
+
+  <!-- Dark charcoal left half of triangle -->
+  <path d="M16,3 L3,27 Q2,30 5,30 L20,30 Z" fill="#3c3c3c"/>
+
+  <!-- Lime green right half of triangle -->
+  <path d="M16,3 L20,30 L27,30 Q30,30 29,27 Z" fill="#c4e04e"/>
+
+  <!-- Darker apex accent at junction -->
+  <path d="M16,3 L18.5,10 L13.5,10 Z" fill="#4a4a4a" opacity="0.7"/>
+</svg>

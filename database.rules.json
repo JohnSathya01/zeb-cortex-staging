@@ -1,0 +1,44 @@
+{
+  "rules": {
+    "users": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'leadership'",
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+    "assignments": {
+      ".read": "auth != null",
+      "$assignmentId": {
+        ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'leadership' || data.child('learnerId').val() === auth.uid)"
+      }
+    },
+    "progress": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'leadership'",
+      "$learnerId": {
+        ".read": "auth != null && auth.uid === $learnerId",
+        ".write": "auth != null && auth.uid === $learnerId"
+      }
+    },
+    "assessments": {
+      ".read": "auth != null",
+      "$courseId": {
+        "$chapterId": {
+          ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'leadership'"
+        }
+      }
+    },
+    "notifications": {
+      "$userId": {
+        ".read": "auth != null && auth.uid === $userId",
+        ".write": "auth != null"
+      }
+    },
+    "chats": {
+      "$assignmentId": {
+        ".read": "auth != null && (root.child('assignments').child($assignmentId).child('learnerId').val() === auth.uid || root.child('assignments').child($assignmentId).child('reviewerId').val() === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'leadership')",
+        ".write": "auth != null && (root.child('assignments').child($assignmentId).child('learnerId').val() === auth.uid || root.child('assignments').child($assignmentId).child('reviewerId').val() === auth.uid)"
+      }
+    }
+  }
+}
