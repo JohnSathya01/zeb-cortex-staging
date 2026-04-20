@@ -2,16 +2,20 @@ import { useState, useEffect } from 'react';
 import { useData } from '../../contexts/DataContext.jsx';
 import '../../styles/pages.css';
 
-const EMPTY_FORM = { name: '', email: '', password: '', role: 'learner' };
+const SPECIALISATIONS = [
+  'Model Building/Finetuning',
+  'Data Engineering',
+  'MLOps',
+  'Computer Vision',
+  'Natural Language Processing',
+  'Reinforcement Learning',
+  'AI Platform Engineering',
+];
+
+const EMPTY_FORM = { name: '', email: '', password: '', role: 'learner', specialisation: SPECIALISATIONS[0] };
 
 export default function UserManagementPage() {
-  const {
-    getUsers,
-    getAssignments,
-    createUserRecord,
-    updateUser,
-    deleteUser,
-  } = useData();
+  const { getUsers, getAssignments, createUserRecord, updateUser, deleteUser } = useData();
 
   const [users, setUsers] = useState([]);
   const [assignments, setAssignments] = useState([]);
@@ -21,9 +25,7 @@ export default function UserManagementPage() {
   const [errors, setErrors] = useState({});
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
   async function loadData() {
     const [u, a] = await Promise.all([getUsers(), getAssignments()]);
@@ -35,8 +37,6 @@ export default function UserManagementPage() {
     return assignments.filter((a) => a.learnerId === userId).length;
   }
 
-  // ── Form handling ──
-
   function openAddForm() {
     setEditingUser(null);
     setFormData(EMPTY_FORM);
@@ -46,7 +46,13 @@ export default function UserManagementPage() {
 
   function openEditForm(user) {
     setEditingUser(user);
-    setFormData({ name: user.name, email: user.email, password: '', role: user.role });
+    setFormData({
+      name: user.name,
+      email: user.email,
+      password: '',
+      role: user.role,
+      specialisation: user.specialisation || SPECIALISATIONS[0],
+    });
     setErrors({});
     setShowForm(true);
   }
@@ -65,22 +71,21 @@ export default function UserManagementPage() {
     if (!editingUser && !formData.password.trim()) errs.password = 'Password is required';
     if (!editingUser && formData.password.trim().length < 6) errs.password = 'Password must be at least 6 characters';
     if (!formData.role) errs.role = 'Role is required';
+    if (!formData.specialisation) errs.specialisation = 'Specialisation is required';
     return errs;
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
     const errs = validate();
-    if (Object.keys(errs).length > 0) {
-      setErrors(errs);
-      return;
-    }
+    if (Object.keys(errs).length > 0) { setErrors(errs); return; }
 
     if (editingUser) {
       await updateUser(editingUser.id, {
         name: formData.name.trim(),
         email: formData.email.trim(),
         role: formData.role,
+        specialisation: formData.specialisation,
       });
     } else {
       await createUserRecord({
@@ -88,6 +93,7 @@ export default function UserManagementPage() {
         email: formData.email.trim(),
         password: formData.password.trim(),
         role: formData.role,
+        specialisation: formData.specialisation,
       });
     }
 
@@ -95,11 +101,7 @@ export default function UserManagementPage() {
     await loadData();
   }
 
-  // ── Delete handling ──
-
-  function confirmDelete(user) {
-    setDeleteTarget(user);
-  }
+  function confirmDelete(user) { setDeleteTarget(user); }
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -108,15 +110,11 @@ export default function UserManagementPage() {
     await loadData();
   }
 
-  // ── Render ──
-
   return (
     <div>
       <div className="page-header">
         <h1>User Management</h1>
-        <button className="btn btn-primary" onClick={openAddForm}>
-          Add User
-        </button>
+        <button className="btn btn-primary" onClick={openAddForm}>Add User</button>
       </div>
 
       {users.length === 0 ? (
@@ -128,6 +126,7 @@ export default function UserManagementPage() {
               <th>Name</th>
               <th>Email</th>
               <th>Role</th>
+              <th>Specialisation</th>
               <th>Assigned Courses</th>
               <th>Actions</th>
             </tr>
@@ -138,21 +137,12 @@ export default function UserManagementPage() {
                 <td>{user.name}</td>
                 <td>{user.email}</td>
                 <td style={{ textTransform: 'capitalize' }}>{user.role}</td>
+                <td>{user.specialisation || '—'}</td>
                 <td>{getAssignedCourseCount(user.id)}</td>
                 <td>
                   <div className="actions-cell">
-                    <button
-                      className="btn btn-secondary btn-sm"
-                      onClick={() => openEditForm(user)}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      className="btn btn-danger btn-sm"
-                      onClick={() => confirmDelete(user)}
-                    >
-                      Delete
-                    </button>
+                    <button className="btn btn-secondary btn-sm" onClick={() => openEditForm(user)}>Edit</button>
+                    <button className="btn btn-danger btn-sm" onClick={() => confirmDelete(user)}>Delete</button>
                   </div>
                 </td>
               </tr>
@@ -167,83 +157,64 @@ export default function UserManagementPage() {
           <div className="form-modal" onClick={(e) => e.stopPropagation()}>
             <h2>{editingUser ? 'Edit User' : 'Add User'}</h2>
             <form onSubmit={handleSubmit} noValidate>
+
               <div className="form-group">
                 <label htmlFor="user-name">Name</label>
-                <input
-                  id="user-name"
-                  type="text"
+                <input id="user-name" type="text"
                   className={errors.name ? 'input-error' : ''}
                   value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
-                />
-                {errors.name && (
-                  <div className="field-error">{errors.name}</div>
-                )}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
+                {errors.name && <div className="field-error">{errors.name}</div>}
               </div>
 
               <div className="form-group">
                 <label htmlFor="user-email">Email</label>
-                <input
-                  id="user-email"
-                  type="email"
+                <input id="user-email" type="email"
                   className={errors.email ? 'input-error' : ''}
                   value={formData.email}
-                  onChange={(e) =>
-                    setFormData({ ...formData, email: e.target.value })
-                  }
-                />
-                {errors.email && (
-                  <div className="field-error">{errors.email}</div>
-                )}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
+                {errors.email && <div className="field-error">{errors.email}</div>}
               </div>
 
               {!editingUser && (
                 <div className="form-group">
                   <label htmlFor="user-password">Password</label>
-                  <input
-                    id="user-password"
-                    type="password"
+                  <input id="user-password" type="password"
                     className={errors.password ? 'input-error' : ''}
                     value={formData.password}
-                    onChange={(e) =>
-                      setFormData({ ...formData, password: e.target.value })
-                    }
-                    placeholder="Min 6 characters"
-                  />
-                  {errors.password && (
-                    <div className="field-error">{errors.password}</div>
-                  )}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    placeholder="Min 6 characters" />
+                  {errors.password && <div className="field-error">{errors.password}</div>}
                 </div>
               )}
 
               <div className="form-group">
                 <label htmlFor="user-role">Role</label>
-                <select
-                  id="user-role"
+                <select id="user-role"
                   className={errors.role ? 'input-error' : ''}
                   value={formData.role}
-                  onChange={(e) =>
-                    setFormData({ ...formData, role: e.target.value })
-                  }
-                >
+                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}>
                   <option value="learner">Learner</option>
                   <option value="leadership">Leadership</option>
                 </select>
-                {errors.role && (
-                  <div className="field-error">{errors.role}</div>
-                )}
+                {errors.role && <div className="field-error">{errors.role}</div>}
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="user-specialisation">Specialisation</label>
+                <select id="user-specialisation"
+                  className={errors.specialisation ? 'input-error' : ''}
+                  value={formData.specialisation}
+                  onChange={(e) => setFormData({ ...formData, specialisation: e.target.value })}>
+                  {SPECIALISATIONS.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+                {errors.specialisation && <div className="field-error">{errors.specialisation}</div>}
               </div>
 
               <div className="form-actions">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={closeForm}
-                >
-                  Cancel
-                </button>
+                <button type="button" className="btn btn-secondary" onClick={closeForm}>Cancel</button>
                 <button type="submit" className="btn btn-primary">
                   {editingUser ? 'Save Changes' : 'Create User'}
                 </button>
@@ -253,26 +224,14 @@ export default function UserManagementPage() {
         </div>
       )}
 
-      {/* Delete Confirmation Dialog */}
+      {/* Delete Confirmation */}
       {deleteTarget && (
         <div className="confirm-overlay" onClick={() => setDeleteTarget(null)}>
-          <div
-            className="confirm-dialog"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <p>
-              Are you sure you want to delete <strong>{deleteTarget.name}</strong>?
-            </p>
+          <div className="confirm-dialog" onClick={(e) => e.stopPropagation()}>
+            <p>Are you sure you want to delete <strong>{deleteTarget.name}</strong>?</p>
             <div className="form-actions">
-              <button
-                className="btn btn-secondary"
-                onClick={() => setDeleteTarget(null)}
-              >
-                Cancel
-              </button>
-              <button className="btn btn-danger" onClick={handleDelete}>
-                Delete
-              </button>
+              <button className="btn btn-secondary" onClick={() => setDeleteTarget(null)}>Cancel</button>
+              <button className="btn btn-danger" onClick={handleDelete}>Delete</button>
             </div>
           </div>
         </div>
