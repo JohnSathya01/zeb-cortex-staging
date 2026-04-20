@@ -1,5 +1,13 @@
 {
   "projects": {
     "default": "zeb-poc"
+  },
+  "targets": {
+    "zeb-poc": {
+      "hosting": {
+        "main": ["cortex-zeb"],
+        "moved": ["zeb-poc"]
+      }
+    }
   }
 }
