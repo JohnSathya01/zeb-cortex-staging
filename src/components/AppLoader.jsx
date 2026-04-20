@@ -8,18 +8,15 @@ function ZebMark() {
   return (
     <svg
       className="zeb-mark"
-      viewBox="0 0 46 46"
+      viewBox="0 0 52 46"
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
     >
       {/* Dark charcoal left half */}
-      <path d="M23,3 L7,39 Q4,45 10,45 L30,45 Z" fill="#3c3c3c" />
+      <path d="M26,2 L4,42 Q2,44 5,44 L26,44 Z" fill="#3c3c3c" />
 
       {/* Lime green right half */}
-      <path d="M23,3 L30,45 L37,45 Q43,45 40,39 Z" fill="#c4e04e" />
-
-      {/* Darker apex accent where the two halves meet */}
-      <path d="M23,3 L27,15 L19,15 Z" fill="#555555" opacity="0.75" />
+      <path d="M26,2 L26,44 L47,44 Q50,44 48,42 Z" fill="#c4e04e" />
     </svg>
   );
 }
