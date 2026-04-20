@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "site": "zeb-poc",
+    "site": "cortex-zeb",
     "public": "dist",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [
