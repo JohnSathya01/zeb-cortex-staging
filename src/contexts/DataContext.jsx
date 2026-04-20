@@ -5,6 +5,7 @@ import { encryptField, decryptField } from '../utils/encryption.js';
 import { useAuth } from './AuthContext.jsx';
 import { createNotification as createNotificationRecord } from '../models/index.js';
 import {
+  initCourses,
   getCourses as getCoursesFromData,
   getCourseById as getCourseByIdFromData,
   createCourseRecord as createCourseRecordFromData,
@@ -28,7 +29,20 @@ export function DataProvider({ children }) {
 
   useEffect(() => {
     if (isAuthenticated) {
-      setLoading(false);
+      let cancelled = false;
+      initCourses()
+        .then(() => {
+          if (!cancelled && mountedRef.current) {
+            setLoading(false);
+          }
+        })
+        .catch((err) => {
+          console.warn('Failed to initialize courses:', err);
+          if (!cancelled && mountedRef.current) {
+            setLoading(false);
+          }
+        });
+      return () => { cancelled = true; };
     } else {
       setLoading(false);
     }

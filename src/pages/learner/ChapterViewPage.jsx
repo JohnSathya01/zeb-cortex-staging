@@ -88,6 +88,19 @@ export default function ChapterViewPage() {
       // Check if already completed
       setChapterCompleted(prog.completedChapterIds.includes(chapterId));
 
+      // Auto-complete if no assessments and no exercises
+      const hasRtdbAssessments = converted.length > 0;
+      const hasExercises = ch.exercises.length > 0;
+      const alreadyCompleted = prog.completedChapterIds.includes(chapterId);
+      if (!hasRtdbAssessments && !hasExercises && !alreadyCompleted) {
+        try {
+          await markChapterComplete(user.uid, courseId, chapterId);
+          setChapterCompleted(true);
+        } catch {
+          // handle error
+        }
+      }
+
       // Fetch reviewer if assigned
       try {
         const allAssignments = await getAssignments({ learnerId: user.uid, courseId });

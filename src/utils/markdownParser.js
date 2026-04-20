@@ -231,3 +231,72 @@ export function validateMarkdownStructure(parsed) {
     errors,
   };
 }
+
+
+/**
+ * Splits a multi-chapter markdown string on `---` horizontal rules
+ * that appear between top-level `# ` headings.
+ *
+ * A `---` is only treated as a chapter separator if:
+ *   1. There is already accumulated content (currentChunk is non-empty)
+ *   2. The next non-blank line after the `---` is a `# ` heading (not `##`)
+ *
+ * @param {string} markdownString - Raw markdown with one or more chapters
+ * @returns {string[]} - Array of individual chapter markdown strings
+ */
+export function splitChapters(markdownString) {
+  if (!markdownString || markdownString.trim().length === 0) {
+    return [];
+  }
+
+  const lines = markdownString.split('\n');
+  const chunks = [];
+  let currentChunk = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+
+    // Detect a `---` horizontal rule that might be a chapter boundary
+    if (trimmed === '---' && currentChunk.length > 0) {
+      // Look ahead: is there a `# ` heading coming (skipping blank lines)?
+      let nextHeadingIndex = -1;
+      for (let j = i + 1; j < lines.length; j++) {
+        const nextTrimmed = lines[j].trim();
+        if (nextTrimmed === '') continue; // skip blank lines
+        if (/^#\s+/.test(nextTrimmed) && !/^##/.test(nextTrimmed)) {
+          nextHeadingIndex = j;
+        }
+        break; // stop at first non-blank line
+      }
+
+      if (nextHeadingIndex >= 0) {
+        // This `---` is a chapter separator — finalize current chunk
+        chunks.push(currentChunk.join('\n'));
+        currentChunk = [];
+        continue; // skip the `---` line itself
+      }
+    }
+
+    currentChunk.push(lines[i]);
+  }
+
+  // Push final chunk
+  if (currentChunk.length > 0) {
+    chunks.push(currentChunk.join('\n'));
+  }
+
+  // Filter out empty/whitespace-only chunks
+  return chunks.filter(chunk => chunk.trim().length > 0);
+}
+
+/**
+ * Parses a multi-chapter markdown file into an array of chapter objects.
+ * Delegates to splitChapters() then parseMarkdownFile() for each chunk.
+ *
+ * @param {string} markdownString - Raw markdown with one or more chapters
+ * @returns {Array<{ title: string, contentBody: string, assessments: Array, exercises: Array }>}
+ */
+export function parseMultiChapterFile(markdownString) {
+  const chunks = splitChapters(markdownString);
+  return chunks.map(chunk => parseMarkdownFile(chunk));
+}
