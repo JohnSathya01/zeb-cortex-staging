@@ -21,6 +21,8 @@ export function DataProvider({ children }) {
   const { user, isAuthenticated, logout } = useAuth();
   const [loading, setLoading] = useState(true);
   const mountedRef = useRef(true);
+  const userRef = useRef(user);
+  useEffect(() => { userRef.current = user; }, [user]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -53,6 +55,40 @@ export function DataProvider({ children }) {
       logout();
     }
   }, [logout]);
+
+  // ── Audit Log ──
+
+  async function logAudit(action, detail, targetId = null) {
+    try {
+      const actor = userRef.current;
+      const entry = {
+        actorId: actor?.uid || 'unknown',
+        actorName: actor?.name || 'Unknown',
+        action,
+        detail,
+        targetId: targetId || null,
+        timestamp: new Date().toISOString(),
+      };
+      const newRef = push(ref(database, 'auditLogs'));
+      await set(newRef, entry);
+    } catch {
+      // Audit log is best-effort; never block the primary operation
+    }
+  }
+
+  const getAuditLogs = useCallback(async (limitCount = 200) => {
+    try {
+      const snapshot = await get(ref(database, 'auditLogs'));
+      if (!snapshot.exists()) return [];
+      const data = snapshot.val();
+      const logs = Object.entries(data).map(([id, entry]) => ({ id, ...entry }));
+      logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      return logs.slice(0, limitCount);
+    } catch (error) {
+      handlePermissionDenied(error);
+      return [];
+    }
+  }, [handlePermissionDenied]);
 
   // ── Users ──
 
@@ -93,6 +129,7 @@ export function DataProvider({ children }) {
         profile.encryptedPassword = encryptField(data.password);
       }
       await set(newRef, profile);
+      logAudit('create_user', `Created user "${data.name}" with role "${data.role}"`, key);
       return { id: key, uid: key, ...profile };
     } catch (error) {
       handlePermissionDenied(error);
@@ -108,7 +145,9 @@ export function DataProvider({ children }) {
       if (data.role !== undefined) updates.role = data.role;
       await update(ref(database, `users/${id}`), updates);
       const snapshot = await get(ref(database, `users/${id}`));
-      return { id, uid: id, ...snapshot.val() };
+      const updated = snapshot.val();
+      logAudit('update_user', `Updated user "${updated?.name || id}"`, id);
+      return { id, uid: id, ...updated };
     } catch (error) {
       handlePermissionDenied(error);
       throw error;
@@ -117,7 +156,10 @@ export function DataProvider({ children }) {
 
   const deleteUser = useCallback(async (id) => {
     try {
+      const snap = await get(ref(database, `users/${id}`));
+      const name = snap.exists() ? snap.val().name : id;
       await remove(ref(database, `users/${id}`));
+      logAudit('delete_user', `Deleted user "${name}"`, id);
     } catch (error) {
       handlePermissionDenied(error);
       throw error;
@@ -182,7 +224,7 @@ export function DataProvider({ children }) {
     }
   }, [handlePermissionDenied]);
 
-  const createAssignmentRecord = useCallback(async (learnerId, courseId) => {
+  const createAssignmentRecord = useCallback(async (learnerId, courseId, targetCompletionDate = null) => {
     try {
       // Check for duplicates
       const snapshot = await get(ref(database, 'assignments'));
@@ -200,13 +242,84 @@ export function DataProvider({ children }) {
         learnerId,
         courseId,
         status: 'not_started',
-        targetCompletionDate: null,
+        targetCompletionDate: targetCompletionDate || null,
         assignedAt: new Date().toISOString(),
       };
       await set(newRef, assignment);
+      // Resolve names for audit log (best-effort)
+      const [learnerSnap] = await Promise.all([get(ref(database, `users/${learnerId}`))]);
+      const learnerName = learnerSnap.exists() ? learnerSnap.val().name : learnerId;
+      const courses = getCoursesFromData();
+      const course = courses.find((c) => c.id === courseId);
+      const courseName = course ? course.title : courseId;
+      const deadlineNote = targetCompletionDate ? ` (deadline: ${targetCompletionDate})` : '';
+      logAudit('assign_course', `Assigned "${courseName}" to ${learnerName}${deadlineNote}`, newRef.key);
       return { id: newRef.key, ...assignment };
     } catch (error) {
-      if (error?.error) throw error; // re-throw our own errors
+      if (error?.error) throw error;
+      handlePermissionDenied(error);
+      throw error;
+    }
+  }, [handlePermissionDenied]);
+
+  // ── Cohorts ──
+
+  const getCohorts = useCallback(async () => {
+    try {
+      const snapshot = await get(ref(database, 'cohorts'));
+      if (!snapshot.exists()) return [];
+      const data = snapshot.val();
+      return Object.entries(data).map(([id, c]) => ({
+        id,
+        ...c,
+        members: c.members ? Object.keys(c.members) : [],
+      }));
+    } catch (error) {
+      handlePermissionDenied(error);
+      throw error;
+    }
+  }, [handlePermissionDenied]);
+
+  const createCohort = useCallback(async ({ name, description, memberIds = [] }) => {
+    try {
+      const newRef = push(ref(database, 'cohorts'));
+      const members = {};
+      memberIds.forEach((uid) => { members[uid] = true; });
+      const cohort = { name, description: description || '', members, createdAt: new Date().toISOString() };
+      await set(newRef, cohort);
+      logAudit('create_cohort', `Created cohort "${name}" with ${memberIds.length} member(s)`, newRef.key);
+      return { id: newRef.key, ...cohort, members: memberIds };
+    } catch (error) {
+      handlePermissionDenied(error);
+      throw error;
+    }
+  }, [handlePermissionDenied]);
+
+  const updateCohort = useCallback(async (cohortId, { name, description, memberIds }) => {
+    try {
+      const updates = {};
+      if (name !== undefined) updates.name = name;
+      if (description !== undefined) updates.description = description;
+      if (memberIds !== undefined) {
+        const members = {};
+        memberIds.forEach((uid) => { members[uid] = true; });
+        updates.members = members;
+      }
+      await update(ref(database, `cohorts/${cohortId}`), updates);
+      logAudit('update_cohort', `Updated cohort "${name || cohortId}"`, cohortId);
+    } catch (error) {
+      handlePermissionDenied(error);
+      throw error;
+    }
+  }, [handlePermissionDenied]);
+
+  const deleteCohort = useCallback(async (cohortId) => {
+    try {
+      const snap = await get(ref(database, `cohorts/${cohortId}`));
+      const cohortName = snap.exists() ? snap.val().name : cohortId;
+      await remove(ref(database, `cohorts/${cohortId}`));
+      logAudit('delete_cohort', `Deleted cohort "${cohortName}"`, cohortId);
+    } catch (error) {
       handlePermissionDenied(error);
       throw error;
     }
@@ -214,7 +327,19 @@ export function DataProvider({ children }) {
 
   const deleteAssignment = useCallback(async (id) => {
     try {
+      const snap = await get(ref(database, `assignments/${id}`));
+      let detail = `Removed assignment ${id}`;
+      if (snap.exists()) {
+        const a = snap.val();
+        const [learnerSnap] = await Promise.all([get(ref(database, `users/${a.learnerId}`))]);
+        const learnerName = learnerSnap.exists() ? learnerSnap.val().name : a.learnerId;
+        const courses = getCoursesFromData();
+        const course = courses.find((c) => c.id === a.courseId);
+        const courseName = course ? course.title : a.courseId;
+        detail = `Unassigned "${courseName}" from ${learnerName}`;
+      }
       await remove(ref(database, `assignments/${id}`));
+      logAudit('unassign_course', detail, id);
     } catch (error) {
       handlePermissionDenied(error);
       throw error;
@@ -618,9 +743,11 @@ export function DataProvider({ children }) {
             metadata: meta,
           }),
         ]);
+        logAudit('assign_reviewer', `Assigned ${reviewerName} as reviewer for ${learnerName} in "${courseName}"`, assignmentId);
       } else {
         // Clear reviewer
         await update(ref(database, `assignments/${assignmentId}`), { reviewerId: null });
+        logAudit('remove_reviewer', `Removed reviewer from assignment for "${assignment.courseId}"`, assignmentId);
       }
     } catch (error) {
       handlePermissionDenied(error);
@@ -837,6 +964,13 @@ export function DataProvider({ children }) {
     // Timeline
     setTimeline,
     updateTimeline,
+    // Cohorts
+    getCohorts,
+    createCohort,
+    updateCohort,
+    deleteCohort,
+    // Audit Log
+    getAuditLogs,
     // Reviewer
     assignReviewer,
     getReviewerForAssignment,

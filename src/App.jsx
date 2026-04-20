@@ -16,6 +16,7 @@ import ChatListPage from './pages/leadership/ChatListPage.jsx';
 import ReviewerManagementPage from './pages/leadership/ReviewerManagementPage.jsx';
 import AnalyticsDashboardPage from './pages/leadership/AnalyticsDashboardPage.jsx';
 import CohortManagementPage from './pages/leadership/CohortManagementPage.jsx';
+import AuditLogPage from './pages/leadership/AuditLogPage.jsx';
 import LearnerDashboardPage from './pages/learner/LearnerDashboardPage.jsx';
 import CourseDetailPage from './pages/learner/CourseDetailPage.jsx';
 import ChapterViewPage from './pages/learner/ChapterViewPage.jsx';
@@ -59,6 +60,7 @@ function AppRoutes() {
               <Route path="reviewers" element={<ReviewerManagementPage />} />
               <Route path="analytics" element={<AnalyticsDashboardPage />} />
               <Route path="cohorts" element={<CohortManagementPage />} />
+              <Route path="audit" element={<AuditLogPage />} />
             </Route>
           </Route>
         </Route>
