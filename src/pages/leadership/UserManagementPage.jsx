@@ -4,11 +4,7 @@ import '../../styles/pages.css';
 
 const SPECIALISATIONS = [
   'Model Building/Finetuning',
-  'Data Engineering',
-  'MLOps',
-  'Computer Vision',
-  'Natural Language Processing',
-  'Reinforcement Learning',
+  'Machine Learning',
   'AI Platform Engineering',
 ];
 

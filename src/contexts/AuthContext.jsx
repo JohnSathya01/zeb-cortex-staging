@@ -29,6 +29,7 @@ async function fetchUserProfile(firebaseUser) {
       name: profile.name,
       email: profile.email,
       role: profile.role,
+      specialisation: profile.specialisation || '',
     };
   }
   return {

@@ -10,6 +10,7 @@ export default function ProfilePage() {
         <div className="profile-field"><label>Name</label><div>{user?.name ?? '—'}</div></div>
         <div className="profile-field"><label>Email</label><div>{user?.email ?? '—'}</div></div>
         <div className="profile-field"><label>Role</label><div style={{ textTransform: 'capitalize' }}>{user?.role ?? '—'}</div></div>
+        <div className="profile-field"><label>Specialisation</label><div>{user?.specialisation || '—'}</div></div>
       </div>
     </div>
   );
