@@ -1,0 +1,16 @@
+{
+  "courses": [
+    {
+      "id": "neural-machine-translation",
+      "title": "Neural Machine Translation",
+      "description": "A comprehensive course on NMT systems — from fundamentals to production-scale inference.",
+      "path": "Courses/neural-machine-translation"
+    },
+    {
+      "id": "course-2-test",
+      "title": "Test Course 2",
+      "description": "Test course for platform validation.",
+      "path": "Courses/Course-2-test"
+    }
+  ]
+}

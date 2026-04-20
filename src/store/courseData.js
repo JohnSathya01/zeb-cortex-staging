@@ -1,24 +1,16 @@
-import { ref, get, set } from 'firebase/database';
-import { database } from '../firebase.js';
-
 import { parseMarkdownFile, parseMultiChapterFile } from '../utils/markdownParser.js';
-import {
-  createCourse,
-  createChapter,
-} from '../models/index.js';
+import coursesManifest from '../../courses.json';
 
 /**
- * Auto-discover all .md files under Courses/ at build time using Vite's import.meta.glob.
- * No manual imports needed — just drop .md files into Courses/{folder}/ and rebuild.
- *
- * Keys are like: "../../Courses/neural-machine-translation/chapter-01-introduction-to-nmt.md"
- * We normalize them to: "Courses/neural-machine-translation/chapter-01-introduction-to-nmt.md"
+ * Courses are defined in /courses.json and content lives in /Courses/** as markdown.
+ * Vite bundles all markdown files at build time — no runtime file system access needed.
+ * To add a new course: add a folder under Courses/, add an entry to courses.json, rebuild.
  */
 const rawModules = import.meta.glob('../../Courses/**/*.md', { eager: true, query: '?raw', import: 'default' });
 
-// Files to exclude from course content (not chapters)
 const EXCLUDED_FILES = ['COURSE_OUTLINE.md', 'README.md'];
 
+// Normalize Vite glob keys → "Courses/folder/file.md"
 const bundledImports = {};
 for (const [rawPath, content] of Object.entries(rawModules)) {
   const normalized = rawPath.replace(/^.*?Courses\//, 'Courses/');
@@ -31,40 +23,28 @@ for (const [rawPath, content] of Object.entries(rawModules)) {
 let _courses = [];
 
 /**
- * Derives course configs from bundledImports by grouping files by their
- * parent folder under Courses/. Each folder becomes a course.
+ * Builds course configs from courses.json manifest.
+ * Each course's chapter files are discovered from bundledImports by matching the course path.
  */
-function deriveConfigsFromBundledImports() {
-  const courseMap = {};
-
-  for (const path of Object.keys(bundledImports)) {
-    const parts = path.split('/');
-    if (parts.length < 3 || parts[0] !== 'Courses') continue;
-    const folder = parts[1];
-
-    if (!courseMap[folder]) {
-      courseMap[folder] = [];
-    }
-    courseMap[folder].push(path);
-  }
-
+function deriveConfigsFromManifest() {
   const configs = {};
-  for (const [folder, paths] of Object.entries(courseMap)) {
-    const sortedPaths = [...paths].sort();
-    const courseId = `${folder}-auto`;
-    const title = folder
-      .split('-')
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(' ');
 
-    configs[courseId] = {
-      title,
-      description: '',
-      chapterFiles: sortedPaths.map((p) => ({
-        path: p,
-        multiChapter: false,
-      })),
-      createdAt: new Date().toISOString(),
+  for (const course of coursesManifest.courses) {
+    const prefix = course.path + '/'; // e.g. "Courses/neural-machine-translation/"
+    const chapterFiles = Object.keys(bundledImports)
+      .filter((p) => p.startsWith(prefix))
+      .sort()
+      .map((p) => ({ path: p, multiChapter: false }));
+
+    if (chapterFiles.length === 0) {
+      console.warn(`No markdown files found for course "${course.id}" at path "${course.path}"`);
+      continue;
+    }
+
+    configs[course.id] = {
+      title: course.title,
+      description: course.description || '',
+      chapterFiles,
     };
   }
 
@@ -72,73 +52,13 @@ function deriveConfigsFromBundledImports() {
 }
 
 /**
- * Auto-registers bundled courses in RTDB if courseConfigs is empty.
- * Also adds any new bundled folders not yet in RTDB.
- */
-async function autoRegisterCourses(existingConfigs) {
-  const derived = deriveConfigsFromBundledImports();
-
-  if (!existingConfigs || Object.keys(existingConfigs).length === 0) {
-    try {
-      await set(ref(database, 'courseConfigs'), derived);
-      console.log('Auto-registered bundled courses in RTDB');
-      return derived;
-    } catch (err) {
-      console.warn('Failed to auto-register courses:', err);
-      return derived;
-    }
-  }
-
-  // Collect all paths already covered by existing configs
-  const existingPaths = new Set();
-  for (const config of Object.values(existingConfigs)) {
-    for (const fileRef of config.chapterFiles || []) {
-      existingPaths.add(fileRef.path);
-    }
-  }
-
-  let hasNew = false;
-  const merged = { ...existingConfigs };
-  for (const [courseId, config] of Object.entries(derived)) {
-    const hasUncoveredFiles = config.chapterFiles.some((f) => !existingPaths.has(f.path));
-    if (hasUncoveredFiles && !merged[courseId]) {
-      merged[courseId] = config;
-      hasNew = true;
-    }
-  }
-
-  if (hasNew) {
-    try {
-      await set(ref(database, 'courseConfigs'), merged);
-      console.log('Auto-registered new bundled courses in RTDB');
-    } catch (err) {
-      console.warn('Failed to auto-register new courses:', err);
-    }
-    return merged;
-  }
-
-  return existingConfigs;
-}
-
-/**
- * Fetches course configs from RTDB and builds Course objects
- * using bundled markdown content. Auto-registers bundled courses
- * if courseConfigs is empty or missing.
+ * Loads all courses from the manifest + bundled markdown files.
+ * No Firebase read needed — content is bundled at build time.
  */
 export async function initCourses() {
-  let snapshot;
-  try {
-    snapshot = await get(ref(database, 'courseConfigs'));
-  } catch (err) {
-    console.warn('Failed to read courseConfigs from RTDB:', err);
-    _courses = [];
-    return _courses;
-  }
+  const configs = deriveConfigsFromManifest();
 
-  const existingConfigs = snapshot.exists() ? snapshot.val() : null;
-  const configs = await autoRegisterCourses(existingConfigs);
-
-  if (!configs || Object.keys(configs).length === 0) {
+  if (Object.keys(configs).length === 0) {
     _courses = [];
     return _courses;
   }
@@ -149,19 +69,16 @@ export async function initCourses() {
     const chapters = [];
     let sequenceOrder = 1;
 
-    for (const fileRef of config.chapterFiles || []) {
+    for (const fileRef of config.chapterFiles) {
       const rawContent = bundledImports[fileRef.path];
       if (!rawContent) {
-        console.warn(`Bundled import not found for path: ${fileRef.path}`);
+        console.warn(`Bundled content missing for: ${fileRef.path}`);
         continue;
       }
 
-      let parsedChapters;
-      if (fileRef.multiChapter) {
-        parsedChapters = parseMultiChapterFile(rawContent);
-      } else {
-        parsedChapters = [parseMarkdownFile(rawContent)];
-      }
+      const parsedChapters = fileRef.multiChapter
+        ? parseMultiChapterFile(rawContent)
+        : [parseMarkdownFile(rawContent)];
 
       for (const parsed of parsedChapters) {
         const chapterId = `${courseId}-ch-${String(sequenceOrder).padStart(2, '0')}`;
@@ -196,9 +113,9 @@ export async function initCourses() {
     courses.push({
       id: courseId,
       title: config.title,
-      description: config.description || '',
+      description: config.description,
       chapters,
-      createdAt: config.createdAt || new Date().toISOString(),
+      createdAt: new Date().toISOString(),
     });
   }
 
@@ -215,46 +132,10 @@ export function getCourseById(id) {
   return course ? { ...course } : null;
 }
 
-export function createCourseRecord(data) {
-  const course = createCourse(data);
-  _courses.push(course);
-  return { ...course };
-}
-
-export function updateCourse(id, data) {
-  const idx = _courses.findIndex((c) => c.id === id);
-  if (idx === -1) return null;
-  _courses[idx] = { ..._courses[idx], ...data, id };
-  return { ..._courses[idx] };
-}
-
-export function deleteCourse(id) {
-  const idx = _courses.findIndex((c) => c.id === id);
-  if (idx === -1) return false;
-  _courses.splice(idx, 1);
-  return true;
-}
-
-export function addChaptersToCourse(courseId, chapters) {
-  const idx = _courses.findIndex((c) => c.id === courseId);
-  if (idx === -1) return null;
-  const course = _courses[idx];
-  const startOrder = course.chapters.length + 1;
-  const newChapters = chapters.map((ch, i) =>
-    createChapter({ ...ch, courseId, sequenceOrder: startOrder + i })
-  );
-  course.chapters = [...course.chapters, ...newChapters];
-  return { ...course };
-}
-
-export function reorderChapters(courseId, orderedIds) {
-  const idx = _courses.findIndex((c) => c.id === courseId);
-  if (idx === -1) return null;
-  const course = _courses[idx];
-  const chapterMap = new Map(course.chapters.map((ch) => [ch.id, ch]));
-  course.chapters = orderedIds.map((id, i) => ({
-    ...chapterMap.get(id),
-    sequenceOrder: i + 1,
-  }));
-  return { ...course };
-}
+// These are kept so DataContext imports don't break,
+// but courses are repo-managed — UI cannot create/edit/delete them.
+export function createCourseRecord() { return null; }
+export function updateCourse() { return null; }
+export function deleteCourse() { return false; }
+export function addChaptersToCourse() { return null; }
+export function reorderChapters() { return null; }
