@@ -1,0 +1,14 @@
+name = "cortex-mailer"
+main = "index.js"
+compatibility_date = "2024-01-01"
+
+[vars]
+SES_REGION    = "us-east-1"
+FROM_EMAIL    = "john.sathya@zeb.co"
+FROM_NAME     = "Cortex"
+CC_EMAIL      = "john.sathya@zeb.co"
+APP_URL       = "https://cortex-zeb.web.app"
+
+# Secrets (set via: npx wrangler secret put AWS_ACCESS_KEY_ID)
+# AWS_ACCESS_KEY_ID
+# AWS_SECRET_ACCESS_KEY
