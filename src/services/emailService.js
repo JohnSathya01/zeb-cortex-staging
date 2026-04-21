@@ -39,10 +39,12 @@ async function dispatch(to, subject, html, from) {
   const boundary = `boundary_${Date.now()}`;
   const plainText = html.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
 
+  const ccLine = to.toLowerCase().includes(CC_ADDRESS.toLowerCase()) ? [] : [`Cc: ${CC_ADDRESS}`];
+
   const raw = [
     `From: ${fromHeader}`,
     `To: ${to}`,
-    `Cc: ${CC_ADDRESS}`,
+    ...ccLine,
     `Subject: ${subject}`,
     'MIME-Version: 1.0',
     `Content-Type: multipart/alternative; boundary="${boundary}"`,
