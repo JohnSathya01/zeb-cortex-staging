@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
-import { ref, get } from 'firebase/database';
+import { signInWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword } from 'firebase/auth';
+import { ref, get, update } from 'firebase/database';
 import { auth, database } from '../firebase.js';
 
 const AuthContext = createContext(null);
@@ -30,6 +30,7 @@ async function fetchUserProfile(firebaseUser) {
       email: profile.email,
       role: profile.role,
       specialisation: profile.specialisation || '',
+      mustChangePassword: profile.mustChangePassword === true,
     };
   }
   return {
@@ -37,6 +38,7 @@ async function fetchUserProfile(firebaseUser) {
     name: firebaseUser.displayName || '',
     email: firebaseUser.email,
     role: 'learner',
+    mustChangePassword: false,
   };
 }
 
@@ -77,12 +79,21 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, []);
 
+  const changePassword = useCallback(async (newPassword) => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) throw new Error('Not authenticated');
+    await updatePassword(currentUser, newPassword);
+    await update(ref(database, `users/${currentUser.uid}`), { mustChangePassword: false });
+    setUser(prev => ({ ...prev, mustChangePassword: false }));
+  }, []);
+
   const value = {
     user,
     isAuthenticated: !!user,
     loading,
     login,
     logout,
+    changePassword,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -181,12 +181,18 @@ const box = t => `<table width="100%" cellpadding="0" cellspacing="0" style="mar
 const cta = (label, url) => `<table cellpadding="0" cellspacing="0" style="margin:24px 0 0"><tr><td style="background:#c4e04e;border-radius:8px;padding:12px 28px"><a href="${url}" style="color:#0f1117;font-weight:700;font-size:14px;text-decoration:none;letter-spacing:0.3px">${label}</a></td></tr></table>`;
 const hi  = t => `<strong style="color:#c4e04e">${t}</strong>`;
 
-function tmplWelcome({ toName, app }) {
+function tmplWelcome({ toName, app, tempPassword, toEmail }) {
+  const credBlock = (toEmail || tempPassword)
+    ? box(`${hi('Your login credentials')}<br/><br/>
+${toEmail    ? `${hi('Email:')} ${toEmail}<br/>`       : ''}
+${tempPassword ? `${hi('Temporary password:')} <code style="background:#1e2235;padding:2px 6px;border-radius:4px;font-family:monospace;color:#c4e04e">${tempPassword}</code><br/><br/>
+<span style="color:#f59e0b;font-size:13px">You will be asked to set a new password when you first log in.</span>` : ''}`)
+    : '';
   return layout(`
     ${h1(`Welcome to Cortex${toName ? `, ${toName}` : ''}!`)}
     ${p('Your account is ready. Cortex is your AI learning platform at Zeb — complete courses, track your progress, and connect with your reviewer.')}
-    ${box(`${hi('Next step:')} Log in and check your assigned courses.`)}
-    ${cta('Open Cortex', app)}
+    ${credBlock}
+    ${cta('Log in to Cortex', app)}
   `);
 }
 

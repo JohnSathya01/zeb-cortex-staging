@@ -26,6 +26,7 @@ import ProfilePage from './pages/learner/ProfilePage.jsx';
 import ReviewingPage from './pages/learner/ReviewingPage.jsx';
 import ReviewChatsPage from './pages/learner/ReviewChatsPage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
+import ChangePasswordPage from './pages/ChangePasswordPage.jsx';
 import AppLoader from './components/AppLoader.jsx';
 import './App.css';
 
@@ -47,6 +48,10 @@ function AppRoutes() {
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<LoginPage />} />
+
+        <Route element={<RequireAuth />}>
+          <Route path="/change-password" element={<ChangePasswordPage />} />
+        </Route>
 
         <Route element={<RequireAuth />}>
           <Route element={<RequireRole role="leadership" />}>

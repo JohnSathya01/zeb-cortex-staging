@@ -146,7 +146,7 @@ export function DataProvider({ children }) {
       const uid = await workerAuthCreate(data.email, data.password, data.name);
 
       // Write RTDB profile under the real Auth UID
-      const profile = { name: data.name, email: data.email, role: data.role };
+      const profile = { name: data.name, email: data.email, role: data.role, mustChangePassword: true };
       if (data.specialisation) profile.specialisation = data.specialisation;
       await set(ref(database, `users/${uid}`), profile);
 

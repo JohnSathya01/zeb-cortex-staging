@@ -16,8 +16,9 @@ async function send(type, payload) {
 }
 
 // Welcome — always from Cortex identity (worker default)
-export const sendWelcomeEmail = ({ toEmail, toName }) =>
-  send('welcome', { toEmail, toName });
+// Pass tempPassword so the email can show login credentials
+export const sendWelcomeEmail = ({ toEmail, toName, tempPassword }) =>
+  send('welcome', { toEmail, toName, tempPassword });
 
 // Course assigned — from the leadership user who clicked
 export const sendCourseAssignedEmail = ({ toEmail, toName, courseId, courseName, from }) =>
