@@ -93,6 +93,13 @@ export default function UserManagementPage() {
         role: formData.role,
         specialisation: formData.specialisation,
       });
+
+      // Auto-send welcome email to new user
+      const name = formData.name.trim();
+      const email = formData.email.trim();
+      sendWelcomeEmail({ toEmail: email, toName: name })
+        .then(() => logAudit('send_email', `Auto: welcome email sent to ${name} <${email}>`))
+        .catch(() => {});
     }
 
     closeForm();

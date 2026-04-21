@@ -105,6 +105,19 @@ export default function CourseAssignmentPage() {
       );
       await loadData();
       closeDeadlineModal();
+
+      // Auto-send course assigned email
+      const learner = learners.find((l) => l.id === deadlineModal.learnerId);
+      const course  = courses.find((c) => c.id === selectedCourseId);
+      if (learner?.email) {
+        sendCourseAssignedEmail({
+          toEmail: learner.email, toName: learner.name,
+          courseId: selectedCourseId, courseName: course?.title,
+          from: { email: user?.email, name: user?.name },
+        }).then(() => {
+          logAudit('send_email', `Auto: course assigned email sent to ${learner.name} <${learner.email}> for "${course?.title}"`);
+        }).catch(() => {});
+      }
     } catch (err) {
       setMessage(err.error || 'Course already assigned to this learner');
       closeDeadlineModal();
@@ -133,6 +146,35 @@ export default function CourseAssignmentPage() {
       await assignReviewer(assignmentId, reviewerUid || null);
       await loadData();
       setPending((prev) => { const n = { ...prev }; delete n[assignmentId]; return n; });
+
+      // Auto-send emails when a reviewer is assigned (not removed)
+      if (reviewerUid) {
+        const assignment = assignments.find((a) => a.id === assignmentId);
+        const learner   = learners.find((l) => l.id === assignment?.learnerId);
+        const reviewer  = allUsers.find((u) => u.id === reviewerUid);
+        const course    = courses.find((c) => c.id === assignment?.courseId);
+        const from      = { email: user?.email, name: user?.name };
+
+        // Fire both emails in background — don't block the UI
+        Promise.all([
+          learner?.email && sendReviewerAssignedEmail({
+            toEmail: learner.email, toName: learner.name,
+            reviewerName: reviewer?.name,
+            courseId: assignment.courseId, courseName: course?.title,
+            from,
+          }),
+          reviewer?.email && sendReviewerNewAssignmentEmail({
+            toEmail: reviewer.email, reviewerName: reviewer.name,
+            learnerName: learner?.name,
+            courseId: assignment.courseId, courseName: course?.title,
+            from,
+          }),
+        ]).then(() => {
+          logAudit('send_email', `Auto: reviewer assignment emails — learner: ${learner?.name}, reviewer: ${reviewer?.name}, course: "${course?.title}"`);
+        }).catch(() => {
+          // Email failure is non-blocking
+        });
+      }
     } catch (err) {
       setMessage(err.message || 'Failed to assign reviewer');
     } finally {
