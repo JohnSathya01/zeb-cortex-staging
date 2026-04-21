@@ -13,6 +13,8 @@ dist-ssr
 *.local
 .env
 .env.local
+functions/.env
+functions/node_modules
 
 # Firebase service account (never commit)
 serviceAccountKey.json
