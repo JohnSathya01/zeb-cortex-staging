@@ -4,17 +4,42 @@ import NotificationBell from '../components/NotificationBell.jsx';
 import { IconDashboard, IconUsers, IconBook, IconClipboard, IconChart, IconChat, IconShield, IconLogout, IconAnalytics, IconCohort, IconAudit } from '../components/Icons.jsx';
 import '../styles/layout.css';
 
-const navItems = [
-  { to: '/leadership/dashboard', label: 'Dashboard', Icon: IconDashboard },
-  { to: '/leadership/users', label: 'User Management', Icon: IconUsers },
-  { to: '/leadership/courses', label: 'Course Management', Icon: IconBook },
-  { to: '/leadership/assign', label: 'Course Assignment', Icon: IconClipboard },
-  { to: '/leadership/reviewers', label: 'Reviewer Management', Icon: IconShield },
-  { to: '/leadership/progress', label: 'Progress Monitoring', Icon: IconChart },
-  { to: '/leadership/cohorts', label: 'Cohorts', Icon: IconCohort },
-  { to: '/leadership/analytics', label: 'Analytics', Icon: IconAnalytics },
-  { to: '/leadership/audit', label: 'Audit Log', Icon: IconAudit },
-  { to: '/leadership/chats', label: 'Chats', Icon: IconChat },
+const navGroups = [
+  {
+    label: 'Overview',
+    items: [
+      { to: '/leadership/dashboard', label: 'Dashboard', Icon: IconDashboard },
+    ],
+  },
+  {
+    label: 'People',
+    items: [
+      { to: '/leadership/users',    label: 'User Management',     Icon: IconUsers },
+      { to: '/leadership/cohorts',  label: 'Cohorts',             Icon: IconCohort },
+      { to: '/leadership/reviewers',label: 'Reviewer Management', Icon: IconShield },
+    ],
+  },
+  {
+    label: 'Courses',
+    items: [
+      { to: '/leadership/courses', label: 'Course Management', Icon: IconBook },
+      { to: '/leadership/assign',  label: 'Course Assignment', Icon: IconClipboard },
+    ],
+  },
+  {
+    label: 'Insights',
+    items: [
+      { to: '/leadership/progress',  label: 'Progress Monitoring', Icon: IconChart },
+      { to: '/leadership/analytics', label: 'Analytics',           Icon: IconAnalytics },
+      { to: '/leadership/audit',     label: 'Audit Log',           Icon: IconAudit },
+    ],
+  },
+  {
+    label: 'Communication',
+    items: [
+      { to: '/leadership/chats', label: 'Chats', Icon: IconChat },
+    ],
+  },
 ];
 
 export default function LeadershipLayout() {
@@ -31,11 +56,16 @@ export default function LeadershipLayout() {
           <span>Leadership Portal</span>
         </div>
         <nav className="sidebar-nav">
-          {navItems.map((item) => (
-            <NavLink key={item.to} to={item.to} end={item.to === '/leadership/dashboard'}>
-              <span className="nav-icon"><item.Icon /></span>
-              {item.label}
-            </NavLink>
+          {navGroups.map((group) => (
+            <div key={group.label} className="nav-group">
+              <div className="nav-group-label">{group.label}</div>
+              {group.items.map((item) => (
+                <NavLink key={item.to} to={item.to} end={item.to === '/leadership/dashboard'}>
+                  <span className="nav-icon"><item.Icon /></span>
+                  {item.label}
+                </NavLink>
+              ))}
+            </div>
           ))}
         </nav>
       </aside>
