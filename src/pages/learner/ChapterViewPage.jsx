@@ -12,7 +12,7 @@ import '../../styles/pages.css';
 export default function ChapterViewPage() {
   const { courseId, chapterId } = useParams();
   const { user } = useAuth();
-  const { getCourseById, getProgress, getAssessments, getExercises, submitAssessment, submitExercise, markChapterComplete, getAssignments, getReviewerForAssignment } = useData();
+  const { getCourseById, getProgress, getAssessments, getExercises, submitAssessment, submitExercise, saveExerciseAIReview, markChapterComplete, getAssignments, getReviewerForAssignment } = useData();
   const navigate = useNavigate();
 
   const [chapter, setChapter] = useState(null);
@@ -158,6 +158,11 @@ export default function ChapterViewPage() {
     }
   }
 
+  // Receives AI review silently from ExerciseCard and persists it — user never sees this
+  function handleExerciseAIReview(exerciseId, aiReview) {
+    saveExerciseAIReview(user.uid, courseId, exerciseId, aiReview).catch(() => {});
+  }
+
   async function checkChapterCompletion(assessmentsComplete, currentExerciseSubs) {
     if (!chapter) return;
     const hasAssessments = assessments.length > 0;
@@ -238,6 +243,7 @@ export default function ChapterViewPage() {
               exercise={exercise}
               submission={exerciseSubmissions[exercise.id]}
               onSubmit={handleSubmitExercise}
+              onAIReview={handleExerciseAIReview}
             />
           ))}
         </div>

@@ -585,6 +585,18 @@ export function DataProvider({ children }) {
     }
   }, [handlePermissionDenied]);
 
+  // Saves AI-generated review alongside an exercise submission (silent — never blocks UX)
+  const saveExerciseAIReview = useCallback(async (learnerId, courseId, exerciseId, aiReview) => {
+    try {
+      await update(
+        ref(database, `progress/${learnerId}/${courseId}/exerciseSubmissions/${exerciseId}`),
+        { aiReview }
+      );
+    } catch {
+      // Non-critical — ignore silently
+    }
+  }, []);
+
   // ── Assessments (RTDB) ──
 
   const getAssessments = useCallback(async (courseId, chapterId) => {
@@ -1043,6 +1055,7 @@ export function DataProvider({ children }) {
     markChapterComplete,
     submitAssessment,
     submitExercise,
+    saveExerciseAIReview,
     // Assessments
     getAssessments,
     saveAssessment,
