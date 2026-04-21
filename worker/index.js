@@ -1,12 +1,14 @@
 /**
- * Cortex Mailer — Cloudflare Worker
+ * Cortex Worker — Email + Firebase Auth management
  *
- * POST https://cortex-mailer.<account>.workers.dev
- * Body: { type, toEmail, toName, fromEmail, fromName, ...templateParams }
+ * POST /          { type, ...emailParams }   → send email via AWS SES
+ * POST /auth/create  { email, password, displayName } → create Firebase Auth user
+ * POST /auth/delete  { uid }                → delete Firebase Auth user
  *
- * Secrets (stored in Cloudflare, never in source):
- *   AWS_ACCESS_KEY_ID
- *   AWS_SECRET_ACCESS_KEY
+ * Secrets (Cloudflare secrets, never in source):
+ *   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+ *   GOOGLE_SA_CLIENT_EMAIL, GOOGLE_SA_PRIVATE_KEY
+ *   FIREBASE_API_KEY, FIREBASE_PROJECT_ID
  */
 
 const ALLOWED_ORIGINS = [
@@ -28,6 +30,34 @@ export default {
       return corsResponse(new Response('Method Not Allowed', { status: 405 }), corsOrigin);
     }
 
+    const url = new URL(request.url);
+
+    // ── Firebase Auth routes ──────────────────────────────────────────────────
+    if (url.pathname === '/auth/create') {
+      let body;
+      try { body = await request.json(); } catch { return corsResponse(new Response('Invalid JSON', { status: 400 }), corsOrigin); }
+      try {
+        const uid = await createFirebaseUser(body, env);
+        return corsResponse(Response.json({ ok: true, uid }), corsOrigin);
+      } catch (err) {
+        console.error('auth/create error:', err.message);
+        return corsResponse(Response.json({ ok: false, error: err.message }, { status: 502 }), corsOrigin);
+      }
+    }
+
+    if (url.pathname === '/auth/delete') {
+      let body;
+      try { body = await request.json(); } catch { return corsResponse(new Response('Invalid JSON', { status: 400 }), corsOrigin); }
+      try {
+        await deleteFirebaseUser(body.uid, env);
+        return corsResponse(Response.json({ ok: true }), corsOrigin);
+      } catch (err) {
+        console.error('auth/delete error:', err.message);
+        return corsResponse(Response.json({ ok: false, error: err.message }, { status: 502 }), corsOrigin);
+      }
+    }
+
+    // ── Email route (default POST /) ──────────────────────────────────────────
     let payload;
     try {
       payload = await request.json();
@@ -293,4 +323,101 @@ async function sha256hex(msg) {
 
 function hex(bytes) {
   return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ─── Firebase Auth — Create User ──────────────────────────────────────────────
+// Uses the public Identity Toolkit REST API (no Admin needed for create)
+
+async function createFirebaseUser({ email, password, displayName }, env) {
+  const apiKey = env.FIREBASE_API_KEY;
+  const res = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, displayName, returnSecureToken: false }),
+    }
+  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.message || `Firebase signUp failed: ${res.status}`);
+  return data.localId; // Firebase Auth UID
+}
+
+// ─── Firebase Auth — Delete User ──────────────────────────────────────────────
+// Requires Admin OAuth2 token from service account
+
+async function deleteFirebaseUser(uid, env) {
+  const token = await getGoogleAccessToken(env);
+  const projectId = env.FIREBASE_PROJECT_ID;
+
+  const res = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/projects/${projectId}/accounts:batchDelete`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ localIds: [uid], force: true }),
+    }
+  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.message || `Firebase delete failed: ${res.status}`);
+}
+
+// ─── Google Service Account → OAuth2 Access Token (RS256 JWT) ─────────────────
+
+async function getGoogleAccessToken(env) {
+  const clientEmail = env.GOOGLE_SA_CLIENT_EMAIL;
+  const privateKeyPem = env.GOOGLE_SA_PRIVATE_KEY.replace(/\\n/g, '\n');
+
+  const now = Math.floor(Date.now() / 1000);
+  const header = b64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
+  const claims = b64url(JSON.stringify({
+    iss: clientEmail,
+    sub: clientEmail,
+    scope: 'https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/firebase',
+    aud: 'https://oauth2.googleapis.com/token',
+    iat: now,
+    exp: now + 3600,
+  }));
+
+  const signingInput = `${header}.${claims}`;
+  const signature = await signRS256(signingInput, privateKeyPem);
+  const jwt = `${signingInput}.${signature}`;
+
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`,
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error_description || 'Failed to get Google access token');
+  return data.access_token;
+}
+
+async function signRS256(input, pemKey) {
+  // Strip PEM headers and decode base64
+  const keyData = pemKey
+    .replace(/-----BEGIN PRIVATE KEY-----/, '')
+    .replace(/-----END PRIVATE KEY-----/, '')
+    .replace(/\s+/g, '');
+  const binaryKey = Uint8Array.from(atob(keyData), c => c.charCodeAt(0));
+
+  const cryptoKey = await crypto.subtle.importKey(
+    'pkcs8', binaryKey,
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    false, ['sign']
+  );
+  const sig = await crypto.subtle.sign(
+    'RSASSA-PKCS1-v1_5',
+    cryptoKey,
+    new TextEncoder().encode(input)
+  );
+  return b64url(new Uint8Array(sig));
+}
+
+function b64url(input) {
+  const str = typeof input === 'string' ? input : String.fromCharCode(...input);
+  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }

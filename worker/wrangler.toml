@@ -9,6 +9,10 @@ FROM_NAME     = "Cortex"
 CC_EMAIL      = "john.sathya@zeb.co"
 APP_URL       = "https://cortex-zeb.web.app"
 
-# Secrets (set via: npx wrangler secret put AWS_ACCESS_KEY_ID)
+# Secrets (set via: npx wrangler secret put <NAME>)
 # AWS_ACCESS_KEY_ID
 # AWS_SECRET_ACCESS_KEY
+# FIREBASE_API_KEY
+# FIREBASE_PROJECT_ID
+# GOOGLE_SA_CLIENT_EMAIL
+# GOOGLE_SA_PRIVATE_KEY

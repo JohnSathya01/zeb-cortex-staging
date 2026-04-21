@@ -1,4 +1,29 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+
+const WORKER_URL = import.meta.env.VITE_MAILER_URL;
+
+async function workerAuthCreate(email, password, displayName) {
+  if (!WORKER_URL) throw new Error('VITE_MAILER_URL not configured');
+  const res = await fetch(`${WORKER_URL}/auth/create`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, displayName }),
+  });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || 'Failed to create Firebase Auth user');
+  return data.uid;
+}
+
+async function workerAuthDelete(uid) {
+  if (!WORKER_URL) throw new Error('VITE_MAILER_URL not configured');
+  const res = await fetch(`${WORKER_URL}/auth/delete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uid }),
+  });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || 'Failed to delete Firebase Auth user');
+}
 import { ref, get, set, push, remove, update, child, onValue } from 'firebase/database';
 import { database } from '../firebase.js';
 import { encryptField, decryptField } from '../utils/encryption.js';
@@ -117,20 +142,16 @@ export function DataProvider({ children }) {
 
   const createUserRecord = useCallback(async (data) => {
     try {
-      const newRef = push(ref(database, 'users'));
-      const key = newRef.key;
-      const profile = {
-        name: data.name,
-        email: data.email,
-        role: data.role,
-        pendingAuth: true,
-      };
-      if (data.password) {
-        profile.encryptedPassword = encryptField(data.password);
-      }
-      await set(newRef, profile);
-      logAudit('create_user', `Created user "${data.name}" with role "${data.role}"`, key);
-      return { id: key, uid: key, ...profile };
+      // Create Firebase Auth account via Worker (gets real UID back)
+      const uid = await workerAuthCreate(data.email, data.password, data.name);
+
+      // Write RTDB profile under the real Auth UID
+      const profile = { name: data.name, email: data.email, role: data.role };
+      if (data.specialisation) profile.specialisation = data.specialisation;
+      await set(ref(database, `users/${uid}`), profile);
+
+      logAudit('create_user', `Created user "${data.name}" with role "${data.role}"`, uid);
+      return { id: uid, uid, ...profile };
     } catch (error) {
       handlePermissionDenied(error);
       throw error;
@@ -158,7 +179,15 @@ export function DataProvider({ children }) {
     try {
       const snap = await get(ref(database, `users/${id}`));
       const name = snap.exists() ? snap.val().name : id;
+
+      // Remove RTDB profile
       await remove(ref(database, `users/${id}`));
+
+      // Delete Firebase Auth account via Worker (best-effort — don't block if it fails)
+      workerAuthDelete(id).catch((err) => {
+        console.warn('Auth delete failed (manual cleanup may be needed):', err.message);
+      });
+
       logAudit('delete_user', `Deleted user "${name}"`, id);
     } catch (error) {
       handlePermissionDenied(error);
