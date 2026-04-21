@@ -44,6 +44,14 @@
       ".read": "auth != null",
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'leadership'"
     },
+    "exerciseRules": {
+      ".read": "auth != null",
+      "$courseId": {
+        "$chapterId": {
+          ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'leadership'"
+        }
+      }
+    },
     "auditLogs": {
       ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'leadership'",
       ".write": "auth != null"

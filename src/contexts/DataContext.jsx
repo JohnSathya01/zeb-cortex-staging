@@ -622,6 +622,34 @@ export function DataProvider({ children }) {
     }
   }, [handlePermissionDenied]);
 
+  // ── Exercise Rules (regex validation) ──
+
+  const getExerciseRules = useCallback(async (courseId, chapterId) => {
+    try {
+      const snapshot = await get(ref(database, `exerciseRules/${courseId}/${chapterId}`));
+      if (!snapshot.exists()) return {};
+      return snapshot.val(); // { [exerciseId]: { pattern, flags, hint, explanation } }
+    } catch (error) {
+      handlePermissionDenied(error);
+      return {};
+    }
+  }, [handlePermissionDenied]);
+
+  const saveExerciseRule = useCallback(async (courseId, chapterId, exerciseId, rule) => {
+    try {
+      await set(ref(database, `exerciseRules/${courseId}/${chapterId}/${exerciseId}`), {
+        pattern: rule.pattern || '',
+        flags: rule.flags || 'i',
+        hint: rule.hint || '',
+        explanation: rule.explanation || '',
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      handlePermissionDenied(error);
+      throw error;
+    }
+  }, [handlePermissionDenied]);
+
   // ── Timeline ──
 
   const setTimeline = useCallback(async (assignmentId, targetDate) => {
@@ -969,6 +997,9 @@ export function DataProvider({ children }) {
     createCohort,
     updateCohort,
     deleteCohort,
+    // Exercise Rules
+    getExerciseRules,
+    saveExerciseRule,
     // Audit Log
     getAuditLogs,
     // Reviewer

@@ -84,12 +84,18 @@ export default function CourseManagementPage() {
                             <button
                               className="btn btn-secondary btn-sm"
                               onClick={() =>
-                                navigate(
-                                  `/leadership/courses/${course.id}/chapters/${ch.id}/assessments`
-                                )
+                                navigate(`/leadership/courses/${course.id}/chapters/${ch.id}/assessments`)
                               }
                             >
                               Edit Assessments
+                            </button>
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              onClick={() =>
+                                navigate(`/leadership/courses/${course.id}/chapters/${ch.id}/exercises`)
+                              }
+                            >
+                              Edit Exercises
                             </button>
                           </div>
                         ))}

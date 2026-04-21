@@ -17,6 +17,7 @@ import ReviewerManagementPage from './pages/leadership/ReviewerManagementPage.js
 import AnalyticsDashboardPage from './pages/leadership/AnalyticsDashboardPage.jsx';
 import CohortManagementPage from './pages/leadership/CohortManagementPage.jsx';
 import AuditLogPage from './pages/leadership/AuditLogPage.jsx';
+import ExerciseEditorPage from './pages/leadership/ExerciseEditorPage.jsx';
 import LearnerDashboardPage from './pages/learner/LearnerDashboardPage.jsx';
 import CourseDetailPage from './pages/learner/CourseDetailPage.jsx';
 import ChapterViewPage from './pages/learner/ChapterViewPage.jsx';
@@ -56,6 +57,7 @@ function AppRoutes() {
               <Route path="assign" element={<CourseAssignmentPage />} />
               <Route path="progress" element={<ProgressMonitoringPage />} />
               <Route path="courses/:courseId/chapters/:chapterId/assessments" element={<AssessmentEditorPage />} />
+              <Route path="courses/:courseId/chapters/:chapterId/exercises" element={<ExerciseEditorPage />} />
               <Route path="chats" element={<ChatListPage />} />
               <Route path="reviewers" element={<ReviewerManagementPage />} />
               <Route path="analytics" element={<AnalyticsDashboardPage />} />

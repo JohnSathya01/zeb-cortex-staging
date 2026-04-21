@@ -12,7 +12,7 @@ import '../../styles/pages.css';
 export default function ChapterViewPage() {
   const { courseId, chapterId } = useParams();
   const { user } = useAuth();
-  const { getCourseById, getProgress, getAssessments, submitAssessment, submitExercise, markChapterComplete, getAssignments, getReviewerForAssignment } = useData();
+  const { getCourseById, getProgress, getAssessments, getExerciseRules, submitAssessment, submitExercise, markChapterComplete, getAssignments, getReviewerForAssignment } = useData();
   const navigate = useNavigate();
 
   const [chapter, setChapter] = useState(null);
@@ -30,6 +30,7 @@ export default function ChapterViewPage() {
 
   // Exercise submissions from progress
   const [exerciseSubmissions, setExerciseSubmissions] = useState({});
+  const [exerciseRules, setExerciseRules] = useState({});
 
   // Chapter completion
   const [chapterCompleted, setChapterCompleted] = useState(false);
@@ -65,7 +66,11 @@ export default function ChapterViewPage() {
       }));
       setAssessments(converted);
 
-      const prog = await getProgress(user.uid, courseId);
+      const [prog, rules] = await Promise.all([
+        getProgress(user.uid, courseId),
+        getExerciseRules(courseId, chapterId),
+      ]);
+      setExerciseRules(rules);
       setProgress(prog);
       setCompletedIds(prog.completedChapterIds || []);
 
@@ -231,6 +236,7 @@ export default function ChapterViewPage() {
             <ExerciseCard
               key={exercise.id}
               exercise={exercise}
+              rule={exerciseRules[exercise.id] || null}
               submission={exerciseSubmissions[exercise.id]}
               onSubmit={handleSubmitExercise}
             />
