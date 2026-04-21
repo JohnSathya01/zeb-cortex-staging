@@ -9,6 +9,9 @@ FROM_NAME     = "Cortex"
 CC_EMAIL      = "john.sathya@zeb.co"
 APP_URL       = "https://cortex-zeb.web.app"
 
+[ai]
+binding = "AI"
+
 # Secrets (set via: npx wrangler secret put <NAME>)
 # AWS_ACCESS_KEY_ID
 # AWS_SECRET_ACCESS_KEY

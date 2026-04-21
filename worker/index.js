@@ -10,7 +10,9 @@
  *   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
  *   GOOGLE_SA_CLIENT_EMAIL, GOOGLE_SA_PRIVATE_KEY
  *   FIREBASE_API_KEY, FIREBASE_PROJECT_ID
- *   CF_ACCOUNT_ID, CF_AI_TOKEN
+ *
+ * Bindings (wrangler.toml):
+ *   AI  — Workers AI (free tier, no token needed)
  */
 
 const ALLOWED_ORIGINS = [
@@ -353,9 +355,6 @@ function hex(bytes) {
 // ─── Cloudflare Workers AI — Exercise Review ──────────────────────────────────
 
 async function reviewWithAI({ exercisePrompt, learnerAnswer }, env) {
-  const accountId = env.CF_ACCOUNT_ID;
-  const token     = env.CF_AI_TOKEN;
-
   const system = `You are an AI tutor on the Cortex learning platform at Zeb. \
 Your job is to review a learner's written exercise answer and give clear, constructive feedback. \
 Be encouraging but honest. Highlight what they got right, point out any gaps or misconceptions, \
@@ -365,29 +364,15 @@ and suggest one concrete improvement. Keep your response to 3-5 sentences.`;
     ? `Exercise prompt:\n${exercisePrompt}\n\nLearner's answer:\n${learnerAnswer}`
     : `Learner's answer:\n${learnerAnswer}`;
 
-  const res = await fetch(
-    `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/@cf/meta/llama-3.1-8b-instruct`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        max_tokens: 512,
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user',   content: userMsg },
-        ],
-      }),
-    }
-  );
+  const result = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+    max_tokens: 512,
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user',   content: userMsg },
+    ],
+  });
 
-  const data = await res.json();
-  if (!res.ok || !data.success) {
-    throw new Error(data.errors?.[0]?.message || `AI API error: ${res.status}`);
-  }
-  return data.result.response;
+  return result.response;
 }
 
 // ─── Firebase Auth — Create User ──────────────────────────────────────────────
