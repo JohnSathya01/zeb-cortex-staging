@@ -43,6 +43,18 @@ const components = {
   ul: ({ children }) => <ul className="md-ul">{children}</ul>,
   ol: ({ children }) => <ol className="md-ol">{children}</ol>,
   li: ({ children }) => <li className="md-li">{children}</li>,
+  img: ({ src, alt }) => (
+    <figure className="md-figure">
+      <img
+        src={src}
+        alt={alt || ''}
+        className="md-img"
+        loading="lazy"
+        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+      />
+      {alt && <figcaption className="md-figcaption">{alt}</figcaption>}
+    </figure>
+  ),
 };
 
 export default function MarkdownRenderer({ content }) {

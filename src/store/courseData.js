@@ -33,7 +33,13 @@ function deriveConfigsFromManifest() {
     const prefix = course.path + '/'; // e.g. "Courses/neural-machine-translation/"
     const chapterFiles = Object.keys(bundledImports)
       .filter((p) => p.startsWith(prefix))
-      .sort()
+      .sort((a, b) => {
+        // Natural sort: extract leading numbers from filename so Chapter 2 < Chapter 10
+        const numA = parseInt(a.replace(/.*\/[^\d]*(\d+)[^\d]*\.md$/, '$1'), 10);
+        const numB = parseInt(b.replace(/.*\/[^\d]*(\d+)[^\d]*\.md$/, '$1'), 10);
+        if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+        return a.localeCompare(b);
+      })
       .map((p) => ({ path: p, multiChapter: false }));
 
     if (chapterFiles.length === 0) {
