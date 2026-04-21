@@ -12,7 +12,7 @@ import '../../styles/pages.css';
 export default function ChapterViewPage() {
   const { courseId, chapterId } = useParams();
   const { user } = useAuth();
-  const { getCourseById, getProgress, getAssessments, getExerciseRules, submitAssessment, submitExercise, markChapterComplete, getAssignments, getReviewerForAssignment } = useData();
+  const { getCourseById, getProgress, getAssessments, getExercises, submitAssessment, submitExercise, markChapterComplete, getAssignments, getReviewerForAssignment } = useData();
   const navigate = useNavigate();
 
   const [chapter, setChapter] = useState(null);
@@ -30,7 +30,7 @@ export default function ChapterViewPage() {
 
   // Exercise submissions from progress
   const [exerciseSubmissions, setExerciseSubmissions] = useState({});
-  const [exerciseRules, setExerciseRules] = useState({});
+  const [firebaseExercises, setFirebaseExercises] = useState([]);
 
   // Chapter completion
   const [chapterCompleted, setChapterCompleted] = useState(false);
@@ -66,11 +66,11 @@ export default function ChapterViewPage() {
       }));
       setAssessments(converted);
 
-      const [prog, rules] = await Promise.all([
+      const [prog, fbExercises] = await Promise.all([
         getProgress(user.uid, courseId),
-        getExerciseRules(courseId, chapterId),
+        getExercises(courseId, chapterId),
       ]);
-      setExerciseRules(rules);
+      setFirebaseExercises(fbExercises);
       setProgress(prog);
       setCompletedIds(prog.completedChapterIds || []);
 
@@ -83,7 +83,7 @@ export default function ChapterViewPage() {
 
       // Restore exercise submissions
       const subs = {};
-      for (const ex of ch.exercises) {
+      for (const ex of fbExercises) {
         if (prog.exerciseSubmissions[ex.id]) {
           subs[ex.id] = prog.exerciseSubmissions[ex.id];
         }
@@ -95,7 +95,7 @@ export default function ChapterViewPage() {
 
       // Auto-complete if no assessments and no exercises
       const hasRtdbAssessments = converted.length > 0;
-      const hasExercises = ch.exercises.length > 0;
+      const hasExercises = fbExercises.length > 0;
       const alreadyCompleted = prog.completedChapterIds.includes(chapterId);
       if (!hasRtdbAssessments && !hasExercises && !alreadyCompleted) {
         try {
@@ -161,10 +161,10 @@ export default function ChapterViewPage() {
   async function checkChapterCompletion(assessmentsComplete, currentExerciseSubs) {
     if (!chapter) return;
     const hasAssessments = assessments.length > 0;
-    const hasExercises = chapter.exercises.length > 0;
+    const hasExercises = firebaseExercises.length > 0;
 
     const assessmentsDone = !hasAssessments || assessmentsComplete;
-    const exercisesDone = !hasExercises || chapter.exercises.every((ex) => currentExerciseSubs[ex.id]);
+    const exercisesDone = !hasExercises || firebaseExercises.every((ex) => currentExerciseSubs[ex.id]);
 
     if (assessmentsDone && exercisesDone && !chapterCompleted) {
       try {
@@ -180,7 +180,7 @@ export default function ChapterViewPage() {
   if (!chapter) return <div className="empty-state">Chapter not found.</div>;
 
   const hasAssessments = assessments.length > 0;
-  const hasExercises = chapter.exercises.length > 0;
+  const hasExercises = firebaseExercises.length > 0;
 
   return (
     <div className="chapter-view">
@@ -231,12 +231,11 @@ export default function ChapterViewPage() {
       {/* Exercises Section */}
       {hasExercises && (
         <div className="chapter-section">
-          <h2>Exercises</h2>
-          {chapter.exercises.map((exercise) => (
+          <h2>Try It Yourself</h2>
+          {firebaseExercises.map((exercise) => (
             <ExerciseCard
               key={exercise.id}
               exercise={exercise}
-              rule={exerciseRules[exercise.id] || null}
               submission={exerciseSubmissions[exercise.id]}
               onSubmit={handleSubmitExercise}
             />

@@ -3,7 +3,9 @@ import '../styles/components.css';
 
 const STATUS = { idle: 'idle', pass: 'pass', fail: 'fail' };
 
-export default function ExerciseCard({ exercise, rule, submission, onSubmit }) {
+export default function ExerciseCard({ exercise, submission, onSubmit }) {
+  // Support both Firebase exercises (exercise.prompt, exercise.pattern) and legacy markdown exercises
+  const rule = exercise.pattern ? { pattern: exercise.pattern, flags: exercise.flags, hint: exercise.hint, explanation: exercise.explanation } : null;
   const [code, setCode] = useState(submission?.text || '');
   const [status, setStatus] = useState(submission ? STATUS.pass : STATUS.idle);
   const [feedback, setFeedback] = useState(submission ? '✓ Previously submitted' : '');
@@ -95,7 +97,7 @@ export default function ExerciseCard({ exercise, rule, submission, onSubmit }) {
       {/* Question prompt */}
       <div className="ide-prompt">
         <span className="ide-prompt-icon">?</span>
-        <p>{exercise.instructions || 'Write your answer below.'}</p>
+        <p>{exercise.prompt || exercise.instructions || 'Write your answer below.'}</p>
       </div>
 
       {/* Editor area */}

@@ -622,33 +622,62 @@ export function DataProvider({ children }) {
     }
   }, [handlePermissionDenied]);
 
-  // ── Exercise Rules (regex validation) ──
+  // ── Exercises (Firebase-managed, UI-created) ──
 
-  const getExerciseRules = useCallback(async (courseId, chapterId) => {
+  const getExercises = useCallback(async (courseId, chapterId) => {
     try {
-      const snapshot = await get(ref(database, `exerciseRules/${courseId}/${chapterId}`));
-      if (!snapshot.exists()) return {};
-      return snapshot.val(); // { [exerciseId]: { pattern, flags, hint, explanation } }
+      const snapshot = await get(ref(database, `exercises/${courseId}/${chapterId}`));
+      if (!snapshot.exists()) return [];
+      return Object.entries(snapshot.val())
+        .map(([id, ex]) => ({ id, ...ex }))
+        .sort((a, b) => (a.order || 0) - (b.order || 0));
     } catch (error) {
       handlePermissionDenied(error);
-      return {};
+      return [];
     }
   }, [handlePermissionDenied]);
 
-  const saveExerciseRule = useCallback(async (courseId, chapterId, exerciseId, rule) => {
+  const saveExercise = useCallback(async (courseId, chapterId, exerciseData) => {
     try {
-      await set(ref(database, `exerciseRules/${courseId}/${chapterId}/${exerciseId}`), {
-        pattern: rule.pattern || '',
-        flags: rule.flags || 'i',
-        hint: rule.hint || '',
-        explanation: rule.explanation || '',
-        updatedAt: new Date().toISOString(),
-      });
+      const now = new Date().toISOString();
+      const isNew = !exerciseData.id;
+      const payload = {
+        title: exerciseData.title || 'Exercise',
+        prompt: exerciseData.prompt || '',
+        pattern: exerciseData.pattern || null,
+        flags: exerciseData.flags || 'i',
+        hint: exerciseData.hint || '',
+        explanation: exerciseData.explanation || '',
+        order: exerciseData.order ?? 0,
+        updatedAt: now,
+      };
+      if (isNew) {
+        payload.createdAt = now;
+        const newRef = push(ref(database, `exercises/${courseId}/${chapterId}`));
+        await set(newRef, payload);
+        return { id: newRef.key, ...payload };
+      } else {
+        await update(ref(database, `exercises/${courseId}/${chapterId}/${exerciseData.id}`), payload);
+        return { id: exerciseData.id, ...payload };
+      }
     } catch (error) {
       handlePermissionDenied(error);
       throw error;
     }
   }, [handlePermissionDenied]);
+
+  const deleteExercise = useCallback(async (courseId, chapterId, exerciseId) => {
+    try {
+      await remove(ref(database, `exercises/${courseId}/${chapterId}/${exerciseId}`));
+    } catch (error) {
+      handlePermissionDenied(error);
+      throw error;
+    }
+  }, [handlePermissionDenied]);
+
+  // Legacy alias kept so nothing else breaks
+  const getExerciseRules = useCallback(async () => ({}), []);
+  const saveExerciseRule = useCallback(async () => {}, []);
 
   // ── Timeline ──
 
@@ -997,7 +1026,10 @@ export function DataProvider({ children }) {
     createCohort,
     updateCohort,
     deleteCohort,
-    // Exercise Rules
+    // Exercises
+    getExercises,
+    saveExercise,
+    deleteExercise,
     getExerciseRules,
     saveExerciseRule,
     // Audit Log
