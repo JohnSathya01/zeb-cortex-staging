@@ -2,6 +2,18 @@ import { useState, useRef, useEffect } from 'react';
 import '../styles/components.css';
 
 const STATUS = { idle: 'idle', pass: 'pass', fail: 'fail' };
+const WORKER_URL = import.meta.env.VITE_MAILER_URL;
+
+async function fetchAIReview(exercisePrompt, learnerAnswer) {
+  const res = await fetch(`${WORKER_URL}/ai/review`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ exercisePrompt, learnerAnswer }),
+  });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || 'AI review failed');
+  return data.feedback;
+}
 
 export default function ExerciseCard({ exercise, submission, onSubmit }) {
   // Support both Firebase exercises (exercise.prompt, exercise.pattern) and legacy markdown exercises
@@ -10,6 +22,8 @@ export default function ExerciseCard({ exercise, submission, onSubmit }) {
   const [status, setStatus] = useState(submission ? STATUS.pass : STATUS.idle);
   const [feedback, setFeedback] = useState(submission ? '✓ Previously submitted' : '');
   const [running, setRunning] = useState(false);
+  const [aiReview, setAiReview]     = useState('');
+  const [aiLoading, setAiLoading]   = useState(false);
   const textareaRef = useRef(null);
   const lineCountRef = useRef(null);
 
@@ -76,6 +90,22 @@ export default function ExerciseCard({ exercise, submission, onSubmit }) {
     setCode('');
     setStatus(STATUS.idle);
     setFeedback('');
+    setAiReview('');
+  }
+
+  async function handleAIReview() {
+    if (!code.trim()) return;
+    setAiLoading(true);
+    setAiReview('');
+    try {
+      const prompt = exercise.prompt || exercise.instructions || '';
+      const review = await fetchAIReview(prompt, code);
+      setAiReview(review);
+    } catch {
+      setAiReview('AI review unavailable right now. Please try again.');
+    } finally {
+      setAiLoading(false);
+    }
   }
 
   const isPassed = status === STATUS.pass;
@@ -130,6 +160,17 @@ export default function ExerciseCard({ exercise, submission, onSubmit }) {
         {isPassed && !hasRule && (
           <button className="ide-reset-btn" onClick={handleReset}>Edit</button>
         )}
+        {/* AI Review — available once there's something written */}
+        {code.trim() && (
+          <button
+            className="ide-ai-btn"
+            onClick={handleAIReview}
+            disabled={aiLoading}
+            title="Get AI feedback on your answer"
+          >
+            {aiLoading ? '⟳ Reviewing…' : '✦ AI Review'}
+          </button>
+        )}
       </div>
 
       {/* Output panel */}
@@ -140,6 +181,20 @@ export default function ExerciseCard({ exercise, submission, onSubmit }) {
           {isPassed && hasRule && (
             <span className="ide-score-badge">+1 pt</span>
           )}
+        </div>
+      )}
+
+      {/* AI Review panel */}
+      {(aiReview || aiLoading) && (
+        <div className="ide-ai-review">
+          <div className="ide-ai-review-header">
+            <span className="ide-ai-icon">✦</span>
+            <span>AI Tutor Feedback</span>
+          </div>
+          {aiLoading
+            ? <p className="ide-ai-thinking">Reviewing your answer…</p>
+            : <p className="ide-ai-text">{aiReview}</p>
+          }
         </div>
       )}
     </div>

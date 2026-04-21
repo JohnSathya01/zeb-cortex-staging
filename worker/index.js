@@ -1,14 +1,16 @@
 /**
- * Cortex Worker — Email + Firebase Auth management
+ * Cortex Worker — Email + Firebase Auth + AI Review
  *
  * POST /          { type, ...emailParams }   → send email via AWS SES
  * POST /auth/create  { email, password, displayName } → create Firebase Auth user
  * POST /auth/delete  { uid }                → delete Firebase Auth user
+ * POST /ai/review    { exercisePrompt, learnerAnswer } → AI feedback via Workers AI
  *
  * Secrets (Cloudflare secrets, never in source):
  *   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
  *   GOOGLE_SA_CLIENT_EMAIL, GOOGLE_SA_PRIVATE_KEY
  *   FIREBASE_API_KEY, FIREBASE_PROJECT_ID
+ *   CF_ACCOUNT_ID, CF_AI_TOKEN
  */
 
 const ALLOWED_ORIGINS = [
@@ -53,6 +55,23 @@ export default {
         return corsResponse(Response.json({ ok: true }), corsOrigin);
       } catch (err) {
         console.error('auth/delete error:', err.message);
+        return corsResponse(Response.json({ ok: false, error: err.message }, { status: 502 }), corsOrigin);
+      }
+    }
+
+    // ── AI Review route ───────────────────────────────────────────────────────
+    if (url.pathname === '/ai/review') {
+      let body;
+      try { body = await request.json(); } catch { return corsResponse(new Response('Invalid JSON', { status: 400 }), corsOrigin); }
+      const { exercisePrompt, learnerAnswer } = body;
+      if (!learnerAnswer?.trim()) {
+        return corsResponse(Response.json({ ok: false, error: 'No answer provided' }, { status: 400 }), corsOrigin);
+      }
+      try {
+        const feedback = await reviewWithAI({ exercisePrompt, learnerAnswer }, env);
+        return corsResponse(Response.json({ ok: true, feedback }), corsOrigin);
+      } catch (err) {
+        console.error('ai/review error:', err.message);
         return corsResponse(Response.json({ ok: false, error: err.message }, { status: 502 }), corsOrigin);
       }
     }
@@ -329,6 +348,46 @@ async function sha256hex(msg) {
 
 function hex(bytes) {
   return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ─── Cloudflare Workers AI — Exercise Review ──────────────────────────────────
+
+async function reviewWithAI({ exercisePrompt, learnerAnswer }, env) {
+  const accountId = env.CF_ACCOUNT_ID;
+  const token     = env.CF_AI_TOKEN;
+
+  const system = `You are an AI tutor on the Cortex learning platform at Zeb. \
+Your job is to review a learner's written exercise answer and give clear, constructive feedback. \
+Be encouraging but honest. Highlight what they got right, point out any gaps or misconceptions, \
+and suggest one concrete improvement. Keep your response to 3-5 sentences.`;
+
+  const userMsg = exercisePrompt
+    ? `Exercise prompt:\n${exercisePrompt}\n\nLearner's answer:\n${learnerAnswer}`
+    : `Learner's answer:\n${learnerAnswer}`;
+
+  const res = await fetch(
+    `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/@cf/meta/llama-3.1-8b-instruct`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        max_tokens: 512,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user',   content: userMsg },
+        ],
+      }),
+    }
+  );
+
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.errors?.[0]?.message || `AI API error: ${res.status}`);
+  }
+  return data.result.response;
 }
 
 // ─── Firebase Auth — Create User ──────────────────────────────────────────────
