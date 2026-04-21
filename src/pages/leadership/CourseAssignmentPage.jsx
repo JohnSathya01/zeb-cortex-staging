@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useData } from '../../contexts/DataContext.jsx';
+import { sendCourseAssignedEmail, sendReviewerAssignedEmail } from '../../services/emailService.js';
 import '../../styles/pages.css';
 
 export default function CourseAssignmentPage() {
@@ -59,6 +60,20 @@ export default function CourseAssignmentPage() {
       case 'in_progress': return 'status-badge status-in-progress';
       case 'completed': return 'status-badge status-completed';
       default: return 'status-badge';
+    }
+  }
+
+  const [emailStatus, setEmailStatus] = useState({}); // { [key]: 'sending'|'sent'|'error' }
+
+  async function notifyEmail(key, fn) {
+    setEmailStatus((prev) => ({ ...prev, [key]: 'sending' }));
+    try {
+      await fn();
+      setEmailStatus((prev) => ({ ...prev, [key]: 'sent' }));
+      setTimeout(() => setEmailStatus((prev) => { const n = { ...prev }; delete n[key]; return n; }), 3000);
+    } catch {
+      setEmailStatus((prev) => ({ ...prev, [key]: 'error' }));
+      setTimeout(() => setEmailStatus((prev) => { const n = { ...prev }; delete n[key]; return n; }), 3000);
     }
   }
 
@@ -252,16 +267,56 @@ export default function CourseAssignmentPage() {
                       <td>
                         {assignment ? (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <button
-                              className="btn btn-danger btn-sm"
-                              onClick={() => handleUnassign(assignment.id)}
-                            >
-                              Unassign
-                            </button>
+                            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                              <button
+                                className="btn btn-danger btn-sm"
+                                onClick={() => handleUnassign(assignment.id)}
+                              >
+                                Unassign
+                              </button>
+                              <button
+                                className="btn btn-secondary btn-sm"
+                                disabled={emailStatus[`course-${assignment.id}`] === 'sending'}
+                                title="Notify learner about this course"
+                                style={{ color: emailStatus[`course-${assignment.id}`] === 'sent' ? '#16a34a' : emailStatus[`course-${assignment.id}`] === 'error' ? '#dc2626' : undefined }}
+                                onClick={() => notifyEmail(`course-${assignment.id}`, () =>
+                                  sendCourseAssignedEmail({
+                                    toEmail: learner.email,
+                                    toName: learner.name,
+                                    courseId: selectedCourseId,
+                                    courseName: selectedCourse?.title,
+                                  })
+                                )}
+                              >
+                                {emailStatus[`course-${assignment.id}`] === 'sending' ? '...' : emailStatus[`course-${assignment.id}`] === 'sent' ? '✓ Sent' : emailStatus[`course-${assignment.id}`] === 'error' ? '✕ Failed' : '✉ Notify'}
+                              </button>
+                            </div>
                             {assignment.targetCompletionDate && (
                               <span className="overdue-badge" style={{ fontSize: '11px' }}>
                                 Due {new Date(assignment.targetCompletionDate).toLocaleDateString()}
                               </span>
+                            )}
+                            {assignment.reviewerId && (
+                              <button
+                                className="btn btn-secondary btn-sm"
+                                disabled={emailStatus[`reviewer-${assignment.id}`] === 'sending'}
+                                title="Notify learner about their reviewer"
+                                style={{ color: emailStatus[`reviewer-${assignment.id}`] === 'sent' ? '#16a34a' : emailStatus[`reviewer-${assignment.id}`] === 'error' ? '#dc2626' : undefined }}
+                                onClick={() => {
+                                  const reviewer = allUsers.find((u) => u.id === assignment.reviewerId);
+                                  notifyEmail(`reviewer-${assignment.id}`, () =>
+                                    sendReviewerAssignedEmail({
+                                      toEmail: learner.email,
+                                      toName: learner.name,
+                                      reviewerName: reviewer?.name,
+                                      courseId: selectedCourseId,
+                                      courseName: selectedCourse?.title,
+                                    })
+                                  );
+                                }}
+                              >
+                                {emailStatus[`reviewer-${assignment.id}`] === 'sending' ? '...' : emailStatus[`reviewer-${assignment.id}`] === 'sent' ? '✓ Sent' : emailStatus[`reviewer-${assignment.id}`] === 'error' ? '✕ Failed' : '✉ Reviewer Assigned'}
+                              </button>
                             )}
                           </div>
                         ) : (

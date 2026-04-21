@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useData } from '../../contexts/DataContext.jsx';
+import { sendWelcomeEmail } from '../../services/emailService.js';
 import '../../styles/pages.css';
 
 const SPECIALISATIONS = [
@@ -15,6 +16,7 @@ export default function UserManagementPage() {
 
   const [users, setUsers] = useState([]);
   const [assignments, setAssignments] = useState([]);
+  const [emailStatus, setEmailStatus] = useState({}); // { [userId]: 'sending'|'sent'|'error' }
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [formData, setFormData] = useState(EMPTY_FORM);
@@ -97,6 +99,18 @@ export default function UserManagementPage() {
     await loadData();
   }
 
+  async function handleSendWelcome(user) {
+    setEmailStatus((prev) => ({ ...prev, [user.id]: 'sending' }));
+    try {
+      await sendWelcomeEmail({ toEmail: user.email, toName: user.name });
+      setEmailStatus((prev) => ({ ...prev, [user.id]: 'sent' }));
+      setTimeout(() => setEmailStatus((prev) => { const n = { ...prev }; delete n[user.id]; return n; }), 3000);
+    } catch {
+      setEmailStatus((prev) => ({ ...prev, [user.id]: 'error' }));
+      setTimeout(() => setEmailStatus((prev) => { const n = { ...prev }; delete n[user.id]; return n; }), 3000);
+    }
+  }
+
   function confirmDelete(user) { setDeleteTarget(user); }
 
   async function handleDelete() {
@@ -139,6 +153,19 @@ export default function UserManagementPage() {
                   <div className="actions-cell">
                     <button className="btn btn-secondary btn-sm" onClick={() => openEditForm(user)}>Edit</button>
                     <button className="btn btn-danger btn-sm" onClick={() => confirmDelete(user)}>Delete</button>
+                    {user.email && (
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        disabled={emailStatus[user.id] === 'sending'}
+                        onClick={() => handleSendWelcome(user)}
+                        title="Send welcome email"
+                        style={{
+                          color: emailStatus[user.id] === 'sent' ? '#16a34a' : emailStatus[user.id] === 'error' ? '#dc2626' : undefined
+                        }}
+                      >
+                        {emailStatus[user.id] === 'sending' ? '...' : emailStatus[user.id] === 'sent' ? '✓ Sent' : emailStatus[user.id] === 'error' ? '✕ Failed' : '✉ Welcome'}
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
