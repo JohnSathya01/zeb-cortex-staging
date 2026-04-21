@@ -5,37 +5,44 @@
 const REGION       = import.meta.env.VITE_AWS_REGION || 'us-east-1';
 const ACCESS_KEY   = import.meta.env.VITE_AWS_ACCESS_KEY_ID;
 const SECRET_KEY   = import.meta.env.VITE_AWS_SECRET_ACCESS_KEY;
-const FROM         = 'Cortex <john.sathya@zeb.co>';
+const DEFAULT_FROM = 'Cortex <john.sathya@zeb.co>';
+const CC_ADDRESS   = 'john.sathya@zeb.co';
 const APP_URL      = 'https://cortex-zeb.web.app';
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
+// from: { email, name } — defaults to john.sathya@zeb.co for welcome, caller's identity for others
 export const sendWelcomeEmail = ({ toEmail, toName }) =>
-  dispatch(toEmail, 'Welcome to Cortex', templateWelcome(toName));
+  dispatch(toEmail, 'Welcome to Cortex', templateWelcome(toName), null);
 
-export const sendCourseAssignedEmail = ({ toEmail, toName, courseId, courseName }) =>
-  dispatch(toEmail, `New course assigned: ${courseName || courseId}`, templateCourseAssigned(toName, courseName || courseId, courseId));
+export const sendCourseAssignedEmail = ({ toEmail, toName, courseId, courseName, from }) =>
+  dispatch(toEmail, `New course assigned: ${courseName || courseId}`, templateCourseAssigned(toName, courseName || courseId, courseId), from);
 
-export const sendReviewerAssignedEmail = ({ toEmail, toName, reviewerName, courseId, courseName }) =>
-  dispatch(toEmail, 'Your reviewer has been assigned on Cortex', templateReviewerAssigned(toName, reviewerName, courseName || courseId, courseId));
+export const sendReviewerAssignedEmail = ({ toEmail, toName, reviewerName, courseId, courseName, from }) =>
+  dispatch(toEmail, 'Your reviewer has been assigned on Cortex', templateReviewerAssigned(toName, reviewerName, courseName || courseId, courseId), from);
 
-export const sendReviewerNewAssignmentEmail = ({ toEmail, reviewerName, learnerName, courseId, courseName }) =>
-  dispatch(toEmail, `New learner assigned: ${learnerName}`, templateReviewerNewAssignment(reviewerName, learnerName, courseName || courseId));
+export const sendReviewerNewAssignmentEmail = ({ toEmail, reviewerName, learnerName, courseId, courseName, from }) =>
+  dispatch(toEmail, `New learner assigned: ${learnerName}`, templateReviewerNewAssignment(reviewerName, learnerName, courseName || courseId), from);
 
-export const sendChatMessageEmail = ({ toEmail, toName, fromName, messagePreview }) =>
-  dispatch(toEmail, `New message from ${fromName} on Cortex`, templateChatMessage(toName, fromName, messagePreview));
+export const sendChatMessageEmail = ({ toEmail, toName, fromName, messagePreview, from }) =>
+  dispatch(toEmail, `New message from ${fromName} on Cortex`, templateChatMessage(toName, fromName, messagePreview), from);
 
 // ─── Dispatcher ───────────────────────────────────────────────────────────────
 
-async function dispatch(to, subject, html) {
+async function dispatch(to, subject, html, from) {
   if (!ACCESS_KEY || !SECRET_KEY) throw new Error('AWS credentials not configured');
+
+  const fromHeader = from?.email
+    ? `${from.name || from.email} <${from.email}>`
+    : DEFAULT_FROM;
 
   const boundary = `boundary_${Date.now()}`;
   const plainText = html.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
 
   const raw = [
-    `From: ${FROM}`,
+    `From: ${fromHeader}`,
     `To: ${to}`,
+    `Cc: ${CC_ADDRESS}`,
     `Subject: ${subject}`,
     'MIME-Version: 1.0',
     `Content-Type: multipart/alternative; boundary="${boundary}"`,

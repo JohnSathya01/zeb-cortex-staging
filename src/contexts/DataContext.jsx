@@ -1034,6 +1034,7 @@ export function DataProvider({ children }) {
     saveExerciseRule,
     // Audit Log
     getAuditLogs,
+    logAudit,
     // Reviewer
     assignReviewer,
     getReviewerForAssignment,

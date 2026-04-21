@@ -14,6 +14,7 @@ const ACTION_META = {
   create_cohort:   { label: 'Create Cohort',    color: 'audit-action-create' },
   update_cohort:   { label: 'Update Cohort',    color: 'audit-action-update' },
   delete_cohort:   { label: 'Delete Cohort',    color: 'audit-action-danger' },
+  send_email:      { label: 'Email Sent',        color: 'audit-action-email' },
 };
 
 const ALL_ACTIONS = Object.keys(ACTION_META);

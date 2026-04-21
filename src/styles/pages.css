@@ -1420,6 +1420,7 @@
 .audit-action-update  { background: #fef9c3; color: #713f12; }
 .audit-action-danger  { background: #fee2e2; color: #991b1b; }
 .audit-action-warn    { background: #ffedd5; color: #9a3412; }
+.audit-action-email   { background: #ede9fe; color: #5b21b6; }
 
 .audit-detail {
   font-size: 14px;

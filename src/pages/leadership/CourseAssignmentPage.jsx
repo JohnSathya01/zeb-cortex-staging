@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
+import { useAuth } from '../../contexts/AuthContext.jsx';
 import { useData } from '../../contexts/DataContext.jsx';
 import { sendCourseAssignedEmail, sendReviewerAssignedEmail, sendReviewerNewAssignmentEmail } from '../../services/emailService.js';
 import '../../styles/pages.css';
 
 export default function CourseAssignmentPage() {
+  const { user } = useAuth();
   const {
     getCourses,
     getUsers,
@@ -11,6 +13,7 @@ export default function CourseAssignmentPage() {
     createAssignmentRecord,
     deleteAssignment,
     assignReviewer,
+    logAudit,
   } = useData();
 
   const [courses, setCourses] = useState([]);
@@ -65,11 +68,12 @@ export default function CourseAssignmentPage() {
 
   const [emailStatus, setEmailStatus] = useState({}); // { [key]: 'sending'|'sent'|'error' }
 
-  async function notifyEmail(key, fn) {
+  async function notifyEmail(key, fn, auditDetail) {
     setEmailStatus((prev) => ({ ...prev, [key]: 'sending' }));
     try {
       await fn();
       setEmailStatus((prev) => ({ ...prev, [key]: 'sent' }));
+      logAudit('send_email', auditDetail);
       setTimeout(() => setEmailStatus((prev) => { const n = { ...prev }; delete n[key]; return n; }), 3000);
     } catch {
       setEmailStatus((prev) => ({ ...prev, [key]: 'error' }));
@@ -279,13 +283,16 @@ export default function CourseAssignmentPage() {
                                 disabled={emailStatus[`course-${assignment.id}`] === 'sending'}
                                 title="Notify learner about this course"
                                 style={{ color: emailStatus[`course-${assignment.id}`] === 'sent' ? '#16a34a' : emailStatus[`course-${assignment.id}`] === 'error' ? '#dc2626' : undefined }}
-                                onClick={() => notifyEmail(`course-${assignment.id}`, () =>
-                                  sendCourseAssignedEmail({
+                                onClick={() => notifyEmail(
+                                  `course-${assignment.id}`,
+                                  () => sendCourseAssignedEmail({
                                     toEmail: learner.email,
                                     toName: learner.name,
                                     courseId: selectedCourseId,
                                     courseName: selectedCourse?.title,
-                                  })
+                                    from: { email: user?.email, name: user?.name },
+                                  }),
+                                  `Course assignment email sent to ${learner.name} <${learner.email}> for "${selectedCourse?.title}" by ${user?.name}`
                                 )}
                               >
                                 {emailStatus[`course-${assignment.id}`] === 'sending' ? '...' : emailStatus[`course-${assignment.id}`] === 'sent' ? '✓ Sent' : emailStatus[`course-${assignment.id}`] === 'error' ? '✕ Failed' : '✉ Notify'}
@@ -304,25 +311,27 @@ export default function CourseAssignmentPage() {
                                 style={{ color: emailStatus[`reviewer-${assignment.id}`] === 'sent' ? '#16a34a' : emailStatus[`reviewer-${assignment.id}`] === 'error' ? '#dc2626' : undefined }}
                                 onClick={() => {
                                   const reviewer = allUsers.find((u) => u.id === assignment.reviewerId);
-                                  notifyEmail(`reviewer-${assignment.id}`, () =>
-                                    Promise.all([
-                                      // Notify learner about their reviewer
+                                  notifyEmail(
+                                    `reviewer-${assignment.id}`,
+                                    () => Promise.all([
                                       sendReviewerAssignedEmail({
                                         toEmail: learner.email,
                                         toName: learner.name,
                                         reviewerName: reviewer?.name,
                                         courseId: selectedCourseId,
                                         courseName: selectedCourse?.title,
+                                        from: { email: user?.email, name: user?.name },
                                       }),
-                                      // Notify reviewer about their new learner
                                       reviewer?.email && sendReviewerNewAssignmentEmail({
                                         toEmail: reviewer.email,
                                         reviewerName: reviewer.name,
                                         learnerName: learner.name,
                                         courseId: selectedCourseId,
                                         courseName: selectedCourse?.title,
+                                        from: { email: user?.email, name: user?.name },
                                       }),
-                                    ])
+                                    ]),
+                                    `Reviewer assignment emails sent — learner: ${learner.name} <${learner.email}>, reviewer: ${reviewer?.name} <${reviewer?.email}> for "${selectedCourse?.title}" by ${user?.name}`
                                   );
                                 }}
                               >

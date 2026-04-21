@@ -12,7 +12,7 @@ const SPECIALISATIONS = [
 const EMPTY_FORM = { name: '', email: '', password: '', role: 'learner', specialisation: SPECIALISATIONS[0] };
 
 export default function UserManagementPage() {
-  const { getUsers, getAssignments, createUserRecord, updateUser, deleteUser } = useData();
+  const { getUsers, getAssignments, createUserRecord, updateUser, deleteUser, logAudit } = useData();
 
   const [users, setUsers] = useState([]);
   const [assignments, setAssignments] = useState([]);
@@ -103,6 +103,7 @@ export default function UserManagementPage() {
     setEmailStatus((prev) => ({ ...prev, [user.id]: 'sending' }));
     try {
       await sendWelcomeEmail({ toEmail: user.email, toName: user.name });
+      logAudit('send_email', `Welcome email sent to ${user.name} <${user.email}>`, user.id);
       setEmailStatus((prev) => ({ ...prev, [user.id]: 'sent' }));
       setTimeout(() => setEmailStatus((prev) => { const n = { ...prev }; delete n[user.id]; return n; }), 3000);
     } catch {
