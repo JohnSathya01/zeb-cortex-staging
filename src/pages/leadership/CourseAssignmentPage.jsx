@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useData } from '../../contexts/DataContext.jsx';
-import { sendCourseAssignedEmail, sendReviewerAssignedEmail } from '../../services/emailService.js';
+import { sendCourseAssignedEmail, sendReviewerAssignedEmail, sendReviewerNewAssignmentEmail } from '../../services/emailService.js';
 import '../../styles/pages.css';
 
 export default function CourseAssignmentPage() {
@@ -305,13 +305,24 @@ export default function CourseAssignmentPage() {
                                 onClick={() => {
                                   const reviewer = allUsers.find((u) => u.id === assignment.reviewerId);
                                   notifyEmail(`reviewer-${assignment.id}`, () =>
-                                    sendReviewerAssignedEmail({
-                                      toEmail: learner.email,
-                                      toName: learner.name,
-                                      reviewerName: reviewer?.name,
-                                      courseId: selectedCourseId,
-                                      courseName: selectedCourse?.title,
-                                    })
+                                    Promise.all([
+                                      // Notify learner about their reviewer
+                                      sendReviewerAssignedEmail({
+                                        toEmail: learner.email,
+                                        toName: learner.name,
+                                        reviewerName: reviewer?.name,
+                                        courseId: selectedCourseId,
+                                        courseName: selectedCourse?.title,
+                                      }),
+                                      // Notify reviewer about their new learner
+                                      reviewer?.email && sendReviewerNewAssignmentEmail({
+                                        toEmail: reviewer.email,
+                                        reviewerName: reviewer.name,
+                                        learnerName: learner.name,
+                                        courseId: selectedCourseId,
+                                        courseName: selectedCourse?.title,
+                                      }),
+                                    ])
                                   );
                                 }}
                               >
