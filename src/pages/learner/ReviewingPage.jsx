@@ -18,7 +18,7 @@ function PointsPill({ pts }) {
 
 export default function ReviewingPage() {
   const { user } = useAuth();
-  const { getAssignments, getUsers, getCourses, getProgressAsReviewer, getCoursePoints, calculateCoursePoints, loading: dataLoading } = useData();
+  const { getAssignments, getUsers, getCourses, getProgressAsReviewer, calculateCoursePoints, loading: dataLoading } = useData();
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -52,9 +52,9 @@ export default function ReviewingPage() {
           const completedChapters = progress.completedChapterIds.length;
           const progressPct = totalChapters > 0 ? Math.round((completedChapters / totalChapters) * 100) : 0;
 
-          // Get points (non-blocking)
+          // Calculate points for this learner (uses cached value if recent)
           let pts = null;
-          try { pts = await getCoursePoints(assignment.learnerId, assignment.courseId); } catch { /* ignore */ }
+          try { pts = await calculateCoursePoints(assignment.learnerId, assignment.courseId, totalChapters, assignment.id, false); } catch { /* ignore */ }
 
           built.push({
             key: `${assignment.learnerId}-${assignment.courseId}`,
@@ -150,7 +150,6 @@ export default function ReviewingPage() {
                         <h4>Chapter Details — {row.learnerName}</h4>
                         <table className="detail-table">
                           <thead><tr><th>Chapter</th><th>Completed</th><th>Assessment</th><th>Exercises</th><th>Actions</th></tr></thead>
-
                           <tbody>
                             {detailData.map((ch) => (
                               <tr key={ch.id}>

@@ -3,7 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useData } from '../contexts/DataContext.jsx';
 import NotificationBell from '../components/NotificationBell.jsx';
-import { IconBookOpen, IconUser, IconLogout, IconShield, IconChart, IconChat } from '../components/Icons.jsx';
+import { IconBookOpen, IconUser, IconLogout, IconShield, IconChart, IconChat, IconAnalytics } from '../components/Icons.jsx';
 import '../styles/layout.css';
 
 export default function LearnerLayout() {
@@ -32,6 +32,9 @@ export default function LearnerLayout() {
         <nav className="sidebar-nav">
           <NavLink to="/learner/dashboard" end>
             <span className="nav-icon"><IconBookOpen /></span>My Courses
+          </NavLink>
+          <NavLink to="/learner/my-points">
+            <span className="nav-icon"><IconAnalytics /></span>My Points
           </NavLink>
           <NavLink to="/learner/profile">
             <span className="nav-icon"><IconUser /></span>Profile

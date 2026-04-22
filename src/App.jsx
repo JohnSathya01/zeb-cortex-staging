@@ -26,6 +26,7 @@ import ProfilePage from './pages/learner/ProfilePage.jsx';
 import ReviewingPage from './pages/learner/ReviewingPage.jsx';
 import ReviewChatsPage from './pages/learner/ReviewChatsPage.jsx';
 import CoursePointsPage from './pages/learner/CoursePointsPage.jsx';
+import MyPointsPage from './pages/learner/MyPointsPage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
 import ChangePasswordPage from './pages/ChangePasswordPage.jsx';
 import AppLoader from './components/AppLoader.jsx';
@@ -83,6 +84,7 @@ function AppRoutes() {
               <Route path="reviewing" element={<ReviewingPage />} />
               <Route path="review-chats" element={<ReviewChatsPage />} />
               <Route path="points/:courseId" element={<CoursePointsPage />} />
+              <Route path="my-points" element={<MyPointsPage />} />
             </Route>
           </Route>
         </Route>

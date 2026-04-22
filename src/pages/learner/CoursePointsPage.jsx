@@ -8,59 +8,33 @@ import '../../styles/pages.css';
 const SLA_MIN = 80;
 
 function ScoreGauge({ score }) {
-  const clamped = Math.max(-30, Math.min(100, score));
-  const norm = (clamped + 30) / 130; // normalize -30..100 → 0..1
-  const radius = 70;
-  const cx = 90;
-  const cy = 90;
-  const strokeW = 10;
-  const circumference = Math.PI * radius; // half circle
-  const filled = norm * circumference;
+  const norm = Math.min(Math.max((score + 30) / 130, 0), 1);
+  const r = 60;
+  const circ = Math.PI * r; // semicircle circumference
+  const dash = norm * circ;
   const color = score >= SLA_MIN ? '#22c55e' : score >= 60 ? '#f59e0b' : '#ef4444';
-  const bgColor = '#e5e7eb';
-  // We'll draw a half circle (bottom arc)
-  const startAngle = Math.PI; // 180°
-  const describeArc = (r, start, end) => {
-    const x1 = cx + r * Math.cos(start);
-    const y1 = cy + r * Math.sin(start);
-    const x2 = cx + r * Math.cos(end);
-    const y2 = cy + r * Math.sin(end);
-    const large = end - start > Math.PI ? 1 : 0;
-    return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`;
-  };
-  const endAngle = startAngle + norm * Math.PI;
+  // SLA marker position at norm = (80+30)/130
+  const slaNorm = 110 / 130;
+  const slaAngle = Math.PI * (1 - slaNorm); // angle from right
+  const slaMx = r * Math.cos(Math.PI - slaNorm * Math.PI);
+  const slaMy = -r * Math.sin(slaNorm * Math.PI);
 
   return (
-    <svg width="180" height="110" viewBox="0 0 180 110" aria-label={`Score: ${score}`}>
+    <svg width="160" height="96" viewBox="-80 -72 160 96" aria-label={`${score} points`}>
       {/* Track */}
-      <path
-        d={describeArc(radius, Math.PI, 2 * Math.PI)}
-        fill="none" stroke={bgColor} strokeWidth={strokeW}
-        strokeLinecap="round"
-      />
-      {/* SLA marker at 80 pts = norm at (80+30)/130 */}
-      {(() => {
-        const slaNorm = (80 + 30) / 130;
-        const slaAngle = Math.PI + slaNorm * Math.PI;
-        const mx = cx + radius * Math.cos(slaAngle);
-        const my = cy + radius * Math.sin(slaAngle);
-        return <circle cx={mx} cy={my} r={4} fill="#6b7280" />;
-      })()}
+      <path d={`M -${r} 0 A ${r} ${r} 0 0 1 ${r} 0`}
+        fill="none" stroke="#e5e7eb" strokeWidth="10" strokeLinecap="round" />
+      {/* SLA marker */}
+      <circle cx={slaMx} cy={slaMy} r="5" fill="#9ca3af" />
+      <text x={slaMx + 2} y={slaMy - 8} fontSize="8" fill="#9ca3af" textAnchor="middle">80</text>
       {/* Fill */}
-      {norm > 0 && (
-        <path
-          d={describeArc(radius, Math.PI, endAngle)}
-          fill="none" stroke={color} strokeWidth={strokeW}
-          strokeLinecap="round"
-          style={{ transition: 'all 0.8s ease' }}
-        />
-      )}
-      {/* Score text */}
-      <text x={cx} y={cy - 8} textAnchor="middle" fontSize="32" fontWeight="800" fill={color}>{score}</text>
-      <text x={cx} y={cy + 12} textAnchor="middle" fontSize="11" fill="#6b7280">out of 100</text>
-      <text x={20} y={108} fontSize="10" fill="#9ca3af">-30</text>
-      <text x={155} y={108} fontSize="10" fill="#9ca3af">100</text>
-      <text x={cx - 6} y={108} fontSize="9" fill="#6b7280">80▲</text>
+      <path d={`M -${r} 0 A ${r} ${r} 0 0 1 ${r} 0`}
+        fill="none" stroke={color} strokeWidth="10" strokeLinecap="round"
+        strokeDasharray={`${dash} ${circ}`}
+        style={{ transition: 'stroke-dasharray 0.8s ease' }} />
+      {/* Score */}
+      <text x="0" y="-18" textAnchor="middle" fontSize="30" fontWeight="800" fill={color}>{score}</text>
+      <text x="0" y="2" textAnchor="middle" fontSize="11" fill="#6b7280">out of 100</text>
     </svg>
   );
 }

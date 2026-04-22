@@ -1,20 +1,20 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { useData } from '../../contexts/DataContext.jsx';
 import OverdueIndicator from '../../components/OverdueIndicator.jsx';
 import PageLoader from '../../components/PageLoader.jsx';
 import '../../styles/pages.css';
 
-function PointsBadge({ points, status }) {
-  if (points === null || points === undefined) return null;
+function PointsBadge({ total, status }) {
+  if (total === null || total === undefined) return null;
   const cls = status === 'on_track' ? 'pts-badge pts-on-track' : status === 'at_risk' ? 'pts-badge pts-at-risk' : 'pts-badge pts-critical';
-  return <span className={cls}>{points} pts</span>;
+  return <span className={cls}>{total} pts</span>;
 }
 
 export default function LearnerDashboardPage() {
   const { user } = useAuth();
-  const { getAssignments, getCourseById, getProgress, calculateCoursePoints, getCoursePoints, loading: dataLoading } = useData();
+  const { getAssignments, getCourseById, getProgress, calculateCoursePoints, loading: dataLoading } = useData();
   const navigate = useNavigate();
 
   const [courseCards, setCourseCards] = useState([]);
@@ -25,6 +25,7 @@ export default function LearnerDashboardPage() {
   }, [user, dataLoading]);
 
   async function loadDashboard() {
+    setLoading(true);
     try {
       const assignments = await getAssignments({ learnerId: user.uid });
       const cards = [];
@@ -38,11 +39,13 @@ export default function LearnerDashboardPage() {
           const progressPct = totalChapters > 0
             ? Math.round((completedCount / totalChapters) * 100)
             : 0;
-          // Get existing points first (fast), then recalculate in background
-          const existingPts = await getCoursePoints(user.uid, assignment.courseId);
-          cards.push({ assignment, course, progressPct, completedCount, totalChapters, points: existingPts });
+          // Calculate points eagerly (email only on status change)
+          const pts = await calculateCoursePoints(
+            user.uid, assignment.courseId, totalChapters, assignment.id, true
+          );
+          cards.push({ assignment, course, progressPct, completedCount, totalChapters, points: pts });
         } catch {
-          // skip
+          // skip this card
         }
       }
       setCourseCards(cards);
@@ -51,42 +54,13 @@ export default function LearnerDashboardPage() {
     } finally {
       setLoading(false);
     }
-    // Background: recalculate all points silently
-    try {
-      const assignments = await getAssignments({ learnerId: user.uid });
-      for (const assignment of assignments) {
-        try {
-          const course = await getCourseById(assignment.courseId);
-          if (!course) continue;
-          const pts = await calculateCoursePoints(
-            user.uid, assignment.courseId, course.chapters.length, assignment.id, false
-          );
-          if (pts) {
-            setCourseCards(prev => prev.map(c =>
-              c.assignment.id === assignment.id ? { ...c, points: pts } : c
-            ));
-          }
-        } catch { /* ignore */ }
-      }
-    } catch { /* ignore */ }
   }
 
-  function statusLabel(status) {
-    switch (status) {
-      case 'not_started': return 'Not Started';
-      case 'in_progress': return 'In Progress';
-      case 'completed': return 'Completed';
-      default: return status;
-    }
+  function statusLabel(s) {
+    return s === 'not_started' ? 'Not Started' : s === 'in_progress' ? 'In Progress' : s === 'completed' ? 'Completed' : s;
   }
-
-  function statusClass(status) {
-    switch (status) {
-      case 'not_started': return 'status-badge status-not-started';
-      case 'in_progress': return 'status-badge status-in-progress';
-      case 'completed': return 'status-badge status-completed';
-      default: return 'status-badge';
-    }
+  function statusClass(s) {
+    return `status-badge status-${s?.replace('_', '-') || 'unknown'}`;
   }
 
   if (loading) return <PageLoader />;
@@ -95,14 +69,15 @@ export default function LearnerDashboardPage() {
 
   return (
     <div>
-      <div className="page-header">
-        <h1>My Courses</h1>
-      </div>
+      <div className="page-header"><h1>My Courses</h1></div>
 
       {atRiskCount > 0 && (
         <div className="pts-alert-banner">
           <span className="pts-alert-icon">⚠</span>
-          <span><strong>{atRiskCount} course{atRiskCount > 1 ? 's are' : ' is'} at risk</strong> — below the 80-point SLA. Take action to get back on track.</span>
+          <span>
+            <strong>{atRiskCount} course{atRiskCount > 1 ? 's are' : ' is'} at risk</strong>
+            {' '}— below the 80-point SLA. Click a course card to see details.
+          </span>
         </div>
       )}
 
@@ -126,32 +101,39 @@ export default function LearnerDashboardPage() {
               <p className="course-card-desc">{course.description}</p>
               <div className="course-card-progress">
                 <div className="progress-bar-container">
-                  <div
-                    className="progress-bar-fill"
-                    style={{ width: `${progressPct}%` }}
-                  />
+                  <div className="progress-bar-fill" style={{ width: `${progressPct}%` }} />
                 </div>
                 <span className="progress-text">{progressPct}% ({completedCount}/{totalChapters} chapters)</span>
               </div>
               <div className="course-card-footer">
-                <span className={statusClass(assignment.status)}>
-                  {statusLabel(assignment.status)}
-                </span>
+                <span className={statusClass(assignment.status)}>{statusLabel(assignment.status)}</span>
                 {assignment.targetCompletionDate && (
-                  <span className="timeline-text">
-                    Due: {new Date(assignment.targetCompletionDate).toLocaleDateString()}
-                  </span>
+                  <span className="timeline-text">Due: {new Date(assignment.targetCompletionDate).toLocaleDateString()}</span>
                 )}
               </div>
-              {points && (
-                <div className="course-card-points" onClick={(e) => { e.stopPropagation(); navigate(`/learner/points/${course.id}?aid=${assignment.id}`); }}>
-                  <PointsBadge points={points.total} status={points.status} />
-                  <span className="pts-sla-label">
-                    {points.status === 'on_track' ? '✓ Above 80-pt SLA' : `Need ${Math.max(0, 80 - points.total)} more pts`}
-                  </span>
-                  <span className="pts-view-link">View Details →</span>
-                </div>
-              )}
+
+              {/* Points section — always visible, click to go to points page */}
+              <div
+                className={`course-card-points${points?.status === 'critical' ? ' course-card-points--critical' : points?.status === 'at_risk' ? ' course-card-points--risk' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/learner/points/${course.id}?aid=${assignment.id}`);
+                }}
+              >
+                {points ? (
+                  <>
+                    <PointsBadge total={points.total} status={points.status} />
+                    <span className="pts-sla-label">
+                      {points.status === 'on_track'
+                        ? '✓ Above 80-pt SLA'
+                        : `⚠ Need ${Math.max(0, 80 - points.total)} more pts for SLA`}
+                    </span>
+                  </>
+                ) : (
+                  <span className="pts-sla-label" style={{ color: 'var(--gray-400)' }}>Points not yet available</span>
+                )}
+                <span className="pts-view-link">View Points →</span>
+              </div>
             </div>
           ))}
         </div>
