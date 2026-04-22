@@ -61,6 +61,51 @@ export default {
       }
     }
 
+    // ── Ask Cortex — general AI Q&A for leadership ────────────────────────────
+    if (url.pathname === '/ai/ask') {
+      let body;
+      try { body = await request.json(); } catch { return corsResponse(new Response('Invalid JSON', { status: 400 }), corsOrigin); }
+      const { question, history = [] } = body;
+      if (!question?.trim()) return corsResponse(Response.json({ ok: false, error: 'No question provided' }, { status: 400 }), corsOrigin);
+      try {
+        const answer = await askCortex({ question, history }, env);
+        return corsResponse(Response.json({ ok: true, answer }), corsOrigin);
+      } catch (err) {
+        console.error('ai/ask error:', err.message);
+        return corsResponse(Response.json({ ok: false, error: err.message }, { status: 502 }), corsOrigin);
+      }
+    }
+
+    // ── AI Generate Assessments ────────────────────────────────────────────────
+    if (url.pathname === '/ai/generate-assessments') {
+      let body;
+      try { body = await request.json(); } catch { return corsResponse(new Response('Invalid JSON', { status: 400 }), corsOrigin); }
+      const { topic, count = 3 } = body;
+      if (!topic?.trim()) return corsResponse(Response.json({ ok: false, error: 'No topic provided' }, { status: 400 }), corsOrigin);
+      try {
+        const assessments = await generateAssessments({ topic, count }, env);
+        return corsResponse(Response.json({ ok: true, assessments }), corsOrigin);
+      } catch (err) {
+        console.error('ai/generate-assessments error:', err.message);
+        return corsResponse(Response.json({ ok: false, error: err.message }, { status: 502 }), corsOrigin);
+      }
+    }
+
+    // ── AI Generate Exercises ──────────────────────────────────────────────────
+    if (url.pathname === '/ai/generate-exercises') {
+      let body;
+      try { body = await request.json(); } catch { return corsResponse(new Response('Invalid JSON', { status: 400 }), corsOrigin); }
+      const { topic, count = 2 } = body;
+      if (!topic?.trim()) return corsResponse(Response.json({ ok: false, error: 'No topic provided' }, { status: 400 }), corsOrigin);
+      try {
+        const exercises = await generateExercises({ topic, count }, env);
+        return corsResponse(Response.json({ ok: true, exercises }), corsOrigin);
+      } catch (err) {
+        console.error('ai/generate-exercises error:', err.message);
+        return corsResponse(Response.json({ ok: false, error: err.message }, { status: 502 }), corsOrigin);
+      }
+    }
+
     // ── Progress read (admin) — for reviewer access ───────────────────────────
     if (url.pathname === '/progress') {
       let body;
@@ -373,6 +418,75 @@ async function sha256hex(msg) {
 
 function hex(bytes) {
   return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ─── Cloudflare Workers AI — Ask Cortex (General Q&A) ────────────────────────
+
+async function askCortex({ question, history }, env) {
+  const messages = [
+    {
+      role: 'system',
+      content: `You are Cortex AI, an intelligent assistant embedded in Zeb's Cortex learning management platform. \
+You help leadership with course design, learner strategy, training content, and platform questions. \
+Be concise, practical, and helpful. Keep answers focused — 2-5 sentences unless more detail is clearly needed.`,
+    },
+    ...history.slice(-8).map((m) => ({ role: m.role, content: m.content })),
+    { role: 'user', content: question },
+  ];
+  const result = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', { max_tokens: 1024, messages });
+  return result.response;
+}
+
+// ─── Cloudflare Workers AI — Generate Assessments (MCQs) ─────────────────────
+
+async function generateAssessments({ topic, count }, env) {
+  const n = Math.min(Math.max(parseInt(count) || 3, 1), 6);
+  const system = `You are a course assessment designer. Generate multiple-choice questions (MCQs) in strict JSON.
+Output ONLY a valid JSON array — no explanation, no markdown, no extra text.
+Each item: { "question": "string", "options": [{ "text": "string", "isCorrect": false }, ...] }
+Rules: exactly 4 options per question, exactly 1 correct answer (isCorrect: true), others false.`;
+
+  const result = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+    max_tokens: 2048,
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: `Generate ${n} MCQ assessments about: ${topic}` },
+    ],
+  });
+
+  const text = result.response.trim();
+  const match = text.match(/\[[\s\S]*\]/);
+  if (!match) throw new Error('AI response did not contain a JSON array');
+  const parsed = JSON.parse(match[0]);
+  // Validate shape
+  return parsed.filter((q) => q.question && Array.isArray(q.options) && q.options.length >= 2);
+}
+
+// ─── Cloudflare Workers AI — Generate Exercises ───────────────────────────────
+
+async function generateExercises({ topic, count }, env) {
+  const n = Math.min(Math.max(parseInt(count) || 2, 1), 5);
+  const system = `You are a course exercise designer. Generate practical learning exercises in strict JSON.
+Output ONLY a valid JSON array — no explanation, no markdown, no extra text.
+Each item: { "title": "string", "prompt": "string", "hint": "string", "explanation": "string" }
+- title: short exercise name (5 words max)
+- prompt: clear learner instructions (1-3 sentences)
+- hint: optional guidance shown on wrong answer (1 sentence, can be "")
+- explanation: what a strong answer looks like (1 sentence, can be "")`;
+
+  const result = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+    max_tokens: 2048,
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: `Generate ${n} exercises about: ${topic}` },
+    ],
+  });
+
+  const text = result.response.trim();
+  const match = text.match(/\[[\s\S]*\]/);
+  if (!match) throw new Error('AI response did not contain a JSON array');
+  const parsed = JSON.parse(match[0]);
+  return parsed.filter((e) => e.title && e.prompt);
 }
 
 // ─── Cloudflare Workers AI — Exercise Review ──────────────────────────────────

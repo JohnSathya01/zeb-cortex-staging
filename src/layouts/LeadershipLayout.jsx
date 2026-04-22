@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import NotificationBell from '../components/NotificationBell.jsx';
+import AskCortexWidget from '../components/AskCortexWidget.jsx';
 import { IconDashboard, IconUsers, IconBook, IconClipboard, IconChart, IconChat, IconShield, IconLogout, IconAnalytics, IconCohort, IconAudit } from '../components/Icons.jsx';
 import '../styles/layout.css';
 
@@ -85,6 +86,7 @@ export default function LeadershipLayout() {
         </header>
         <main className="main-content"><Outlet /></main>
       </div>
+      <AskCortexWidget />
     </div>
   );
 }

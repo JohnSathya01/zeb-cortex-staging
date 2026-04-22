@@ -4,6 +4,8 @@ import { useData } from '../../contexts/DataContext.jsx';
 import PageLoader from '../../components/PageLoader.jsx';
 import '../../styles/pages.css';
 
+const WORKER_URL = import.meta.env.VITE_MAILER_URL;
+const GEN_PHRASES = ['Generating…', 'Crafting exercises…', 'Thinking…', 'Building prompts…', 'Designing tasks…'];
 const EMPTY = { title: '', prompt: '', pattern: '', flags: 'i', hint: '', explanation: '' };
 
 export default function ExerciseEditorPage() {
@@ -21,7 +23,66 @@ export default function ExerciseEditorPage() {
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
+  // AI generation state
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiTopic, setAiTopic] = useState('');
+  const [aiCount, setAiCount] = useState(2);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiPhrase, setAiPhrase] = useState(GEN_PHRASES[0]);
+  const [aiGenerated, setAiGenerated] = useState([]);
+  const [aiError, setAiError] = useState(null);
+  const [addingId, setAddingId] = useState(null);
+
   useEffect(() => { load(); }, [courseId, chapterId]);
+
+  useEffect(() => {
+    if (!aiLoading) return;
+    let i = 0;
+    const t = setInterval(() => { i = (i + 1) % GEN_PHRASES.length; setAiPhrase(GEN_PHRASES[i]); }, 800);
+    return () => clearInterval(t);
+  }, [aiLoading]);
+
+  async function handleAIGenerate() {
+    if (!aiTopic.trim() || aiLoading) return;
+    setAiLoading(true);
+    setAiGenerated([]);
+    setAiError(null);
+    setAiPhrase(GEN_PHRASES[0]);
+    try {
+      const res = await fetch(`${WORKER_URL}/ai/generate-exercises`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: aiTopic, count: aiCount }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'Generation failed');
+      setAiGenerated(data.exercises || []);
+      if (!data.exercises?.length) setAiError('AI returned no exercises. Try a more specific topic.');
+    } catch (err) {
+      setAiError(err.message || 'Generation failed. Try again.');
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  async function handleAddGenerated(ex, idx) {
+    setAddingId(idx);
+    try {
+      await saveExercise(courseId, chapterId, {
+        title: ex.title,
+        prompt: ex.prompt,
+        hint: ex.hint || '',
+        explanation: ex.explanation || '',
+        pattern: '',
+        flags: 'i',
+        order: exercises.length + idx,
+      });
+      setAiGenerated((prev) => prev.filter((_, i) => i !== idx));
+      await load();
+    } catch { /* handle */ } finally {
+      setAddingId(null);
+    }
+  }
 
   async function load() {
     setLoading(true);
@@ -106,6 +167,58 @@ export default function ExerciseEditorPage() {
           )}
         </div>
         <button className="btn btn-primary" onClick={openAdd}>+ Add Exercise</button>
+      </div>
+
+      {/* ── AI Generation Panel ──────────────────────────────────────────────── */}
+      <div className="ai-gen-section">
+        <button className="ai-gen-toggle" onClick={() => { setAiOpen(!aiOpen); setAiGenerated([]); setAiError(null); }}>
+          <span className="ai-gen-toggle-icon">✦</span>
+          Generate with AI
+          <span className="ai-gen-toggle-arrow">{aiOpen ? '▲' : '▼'}</span>
+        </button>
+        {aiOpen && (
+          <div className="ai-gen-body">
+            <div className="ai-gen-controls">
+              <input
+                className="ai-gen-input"
+                type="text"
+                placeholder="Describe the topic… e.g. VRAM limits and out-of-memory errors"
+                value={aiTopic}
+                onChange={(e) => setAiTopic(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAIGenerate()}
+              />
+              <select
+                className="ai-gen-count"
+                value={aiCount}
+                onChange={(e) => setAiCount(Number(e.target.value))}
+              >
+                {[1,2,3,4,5].map((n) => <option key={n} value={n}>{n} exercise{n > 1 ? 's' : ''}</option>)}
+              </select>
+              <button className="ai-gen-btn" onClick={handleAIGenerate} disabled={aiLoading || !aiTopic.trim()}>
+                {aiLoading ? <><span className="ai-gen-spinner" />{aiPhrase}</> : 'Generate'}
+              </button>
+            </div>
+            {aiError && <div className="ai-gen-error">{aiError}</div>}
+            {aiGenerated.length > 0 && (
+              <div className="ai-gen-results">
+                {aiGenerated.map((ex, idx) => (
+                  <div key={idx} className="ai-gen-card">
+                    <div className="ai-gen-card-title">{ex.title}</div>
+                    <div className="ai-gen-card-q">{ex.prompt}</div>
+                    {ex.hint && <div className="ai-gen-card-meta">Hint: {ex.hint}</div>}
+                    <button
+                      className="ai-gen-add-btn"
+                      onClick={() => handleAddGenerated(ex, idx)}
+                      disabled={addingId === idx}
+                    >
+                      {addingId === idx ? 'Adding…' : '+ Add to Chapter'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {exercises.length === 0 ? (
