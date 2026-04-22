@@ -262,10 +262,12 @@ export default {
 
         const ccList = [];
         if (env.CC_EMAIL && learner.email.toLowerCase() !== env.CC_EMAIL.toLowerCase()) ccList.push(env.CC_EMAIL);
+        // Always CC the sender (reviewer) so they get a copy
+        if (fromEmail && fromEmail.toLowerCase() !== learner.email.toLowerCase() && !ccList.includes(fromEmail)) ccList.push(fromEmail);
         const asgEntry = Object.entries(allAssignments || {}).find(([, a]) => a.learnerId === userId && a.courseId === courseId);
         if (asgEntry) {
           const revId = asgEntry[1].reviewerId;
-          if (revId) { const rev = await rd(`users/${revId}`); if (rev?.email && rev.email.toLowerCase() !== learner.email.toLowerCase() && !ccList.includes(rev.email) && rev.email.toLowerCase() !== fromEmail?.toLowerCase()) ccList.push(rev.email); }
+          if (revId) { const rev = await rd(`users/${revId}`); if (rev?.email && rev.email.toLowerCase() !== learner.email.toLowerCase() && !ccList.includes(rev.email)) ccList.push(rev.email); }
         }
 
         const cc = ccList.length > 0 ? ccList.join(', ') : null;
