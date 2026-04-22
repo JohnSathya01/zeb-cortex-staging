@@ -35,3 +35,16 @@ export const sendReviewerNewAssignmentEmail = ({ toEmail, reviewerName, learnerN
 // Chat message notification
 export const sendChatMessageEmail = ({ toEmail, toName, fromName, messagePreview, from }) =>
   send('chat_message', { toEmail, toName, fromName, messagePreview, fromEmail: from?.email, fromName: from?.name });
+
+// Risk alert — triggered by reviewer for at-risk learners
+export const sendRiskAlertEmail = async ({ userId, courseId }) => {
+  if (!WORKER_URL) throw new Error('VITE_MAILER_URL not configured');
+  const res = await fetch(`${WORKER_URL}/email/risk-alert`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId, courseId }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+};

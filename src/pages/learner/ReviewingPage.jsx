@@ -1,18 +1,29 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { useData } from '../../contexts/DataContext.jsx';
+import { sendRiskAlertEmail } from '../../services/emailService.js';
 import AssessmentAnswerViewer from '../../components/AssessmentAnswerViewer.jsx';
 import PageLoader from '../../components/PageLoader.jsx';
 import '../../styles/pages.css';
 
-function PointsPill({ pts }) {
-  if (!pts) return <span style={{ color: '#9ca3af', fontSize: '12px' }}>—</span>;
+function PointsCell({ pts }) {
+  if (!pts) return <span style={{ color: '#9ca3af', fontSize: '12px' }}>--</span>;
   const color = pts.status === 'on_track' ? '#22c55e' : pts.status === 'at_risk' ? '#f59e0b' : '#ef4444';
   const label = { on_track: 'On Track', at_risk: 'At Risk', critical: 'Critical' }[pts.status] || '';
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: 700, background: color + '18', color, border: `1px solid ${color}40` }}>
-      {pts.total} pts · {label}
-    </span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '120px' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+        <span style={{ fontSize: '18px', fontWeight: 800, color }}>{pts.total}</span>
+        <span style={{ fontSize: '11px', fontWeight: 600, color, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</span>
+      </div>
+      <div style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#6b7280' }}>
+        <span title="Timeline">T {pts.timeline ?? 0}</span>
+        <span style={{ color: '#d1d5db' }}>|</span>
+        <span title="AI Engagement">AI {pts.ai ?? 0}</span>
+        <span style={{ color: '#d1d5db' }}>|</span>
+        <span title="Reviewer">R {pts.reviewer ?? 0}</span>
+      </div>
+    </div>
   );
 }
 
@@ -25,6 +36,7 @@ export default function ReviewingPage() {
   const [expandedKey, setExpandedKey] = useState(null);
   const [detailData, setDetailData] = useState(null);
   const [answerViewer, setAnswerViewer] = useState(null);
+  const [alertStatus, setAlertStatus] = useState({});
 
   useEffect(() => {
     if (user && !dataLoading) loadData();
@@ -52,7 +64,6 @@ export default function ReviewingPage() {
           const completedChapters = progress.completedChapterIds.length;
           const progressPct = totalChapters > 0 ? Math.round((completedChapters / totalChapters) * 100) : 0;
 
-          // Calculate points for this learner (uses cached value if recent)
           let pts = null;
           try { pts = await calculateCoursePoints(assignment.learnerId, assignment.courseId, totalChapters, assignment.id, false); } catch { /* ignore */ }
 
@@ -93,13 +104,25 @@ export default function ReviewingPage() {
         id: ch.id,
         title: ch.title || `Chapter ${ch.sequenceOrder}`,
         completed: isCompleted,
-        assessmentScore: assessmentResult ? `${assessmentResult.score}/${assessmentResult.total}` : '—',
+        assessmentScore: assessmentResult ? `${assessmentResult.score}/${assessmentResult.total}` : '--',
         hasAssessmentResult: !!assessmentResult,
         exercises: exerciseStatuses,
       };
     });
     setExpandedKey(row.key);
     setDetailData(chapters);
+  }
+
+  async function handleSendRiskAlert(row) {
+    const key = row.key;
+    setAlertStatus(prev => ({ ...prev, [key]: 'sending' }));
+    try {
+      await sendRiskAlertEmail({ userId: row.assignment.learnerId, courseId: row.assignment.courseId });
+      setAlertStatus(prev => ({ ...prev, [key]: 'sent' }));
+    } catch (err) {
+      console.error('Risk alert failed:', err);
+      setAlertStatus(prev => ({ ...prev, [key]: 'error' }));
+    }
   }
 
   if (loading) return <PageLoader />;
@@ -122,6 +145,7 @@ export default function ReviewingPage() {
               <th>Progress</th>
               <th>Status</th>
               <th>Points</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -141,13 +165,32 @@ export default function ReviewingPage() {
                       {row.status === 'not_started' ? 'Not Started' : row.status === 'in_progress' ? 'In Progress' : 'Completed'}
                     </span>
                   </td>
-                  <td><PointsPill pts={row.pts} /></td>
+                  <td><PointsCell pts={row.pts} /></td>
+                  <td onClick={(e) => e.stopPropagation()}>
+                    {row.pts && (row.pts.status === 'at_risk' || row.pts.status === 'critical') ? (
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        disabled={alertStatus[row.key] === 'sending'}
+                        style={{
+                          color: alertStatus[row.key] === 'sent' ? '#16a34a' : alertStatus[row.key] === 'error' ? '#dc2626' : '#ef4444',
+                          borderColor: alertStatus[row.key] === 'sent' ? '#16a34a40' : '#ef444440',
+                          fontSize: '12px',
+                          whiteSpace: 'nowrap',
+                        }}
+                        onClick={() => handleSendRiskAlert(row)}
+                      >
+                        {alertStatus[row.key] === 'sending' ? 'Sending...' : alertStatus[row.key] === 'sent' ? 'Alert Sent' : alertStatus[row.key] === 'error' ? 'Failed' : 'Send Risk Alert'}
+                      </button>
+                    ) : (
+                      <span style={{ color: '#9ca3af', fontSize: '12px' }}>--</span>
+                    )}
+                  </td>
                 </tr>
                 {expandedKey === row.key && detailData && (
                   <tr className="detail-row">
-                    <td colSpan={4}>
+                    <td colSpan={6}>
                       <div className="detail-content">
-                        <h4>Chapter Details — {row.learnerName}</h4>
+                        <h4>Chapter Details -- {row.learnerName}</h4>
                         <table className="detail-table">
                           <thead><tr><th>Chapter</th><th>Completed</th><th>Assessment</th><th>Exercises</th><th>Actions</th></tr></thead>
                           <tbody>
@@ -156,7 +199,7 @@ export default function ReviewingPage() {
                                 <td>{ch.title}</td>
                                 <td>{ch.completed ? 'Yes' : 'No'}</td>
                                 <td>{ch.assessmentScore}</td>
-                                <td>{ch.exercises.length === 0 ? '—' : ch.exercises.map((ex, i) => <span key={i}>{ex.title}: {ex.submitted ? 'Yes' : 'No'}{i < ch.exercises.length - 1 ? ', ' : ''}</span>)}</td>
+                                <td>{ch.exercises.length === 0 ? '--' : ch.exercises.map((ex, i) => <span key={i}>{ex.title}: {ex.submitted ? 'Yes' : 'No'}{i < ch.exercises.length - 1 ? ', ' : ''}</span>)}</td>
                                 <td>
                                   {ch.hasAssessmentResult && (
                                     <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); setAnswerViewer({ learnerId: row.assignment.learnerId, courseId: row.assignment.courseId, chapterId: ch.id }); }}>

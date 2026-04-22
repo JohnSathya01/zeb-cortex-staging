@@ -230,6 +230,49 @@ export default {
       }
     }
 
+    // ── Risk Alert Email ───────────────────────────────────────────────────────
+    if (url.pathname === '/email/risk-alert') {
+      let body;
+      try { body = await request.json(); } catch { return corsResponse(new Response('Invalid JSON', { status: 400 }), corsOrigin); }
+      const { userId, courseId } = body;
+      if (!userId || !courseId) return corsResponse(Response.json({ ok: false, error: 'Missing userId or courseId' }, { status: 400 }), corsOrigin);
+      try {
+        const token = await getGoogleAccessToken(env);
+        const pid = env.FIREBASE_PROJECT_ID;
+        const dbUrl = (path) => `https://${pid}-default-rtdb.firebaseio.com/${path}.json?access_token=${encodeURIComponent(token)}`;
+        const rd = async (path) => { const res = await fetch(dbUrl(path)); const d = await res.json(); if (d && typeof d === 'object' && d.error) throw new Error(d.error); return d; };
+
+        const [learner, pts, allAssignments] = await Promise.all([
+          rd(`users/${userId}`), rd(`coursePoints/${userId}/${courseId}`), rd('assignments'),
+        ]);
+        if (!learner?.email) return corsResponse(Response.json({ ok: false, error: 'Learner has no email' }, { status: 400 }), corsOrigin);
+        if (!pts) return corsResponse(Response.json({ ok: false, error: 'No points data' }, { status: 400 }), corsOrigin);
+
+        const { subject, html } = buildPointsAlertEmail({
+          toName: learner.name || 'Learner', courseName: courseId,
+          points: pts.total, prevPoints: null, status: pts.status, prevStatus: null,
+          timeline: pts.timeline, ai: pts.ai, reviewer: pts.reviewer,
+          timelineDetail: pts.timelineDetail || {}, app: env.APP_URL || 'https://cortex-zeb.web.app',
+        });
+
+        const ccList = [];
+        if (env.CC_EMAIL && learner.email.toLowerCase() !== env.CC_EMAIL.toLowerCase()) ccList.push(env.CC_EMAIL);
+        const asgEntry = Object.entries(allAssignments || {}).find(([, a]) => a.learnerId === userId && a.courseId === courseId);
+        if (asgEntry) {
+          const revId = asgEntry[1].reviewerId;
+          if (revId) { const rev = await rd(`users/${revId}`); if (rev?.email && rev.email.toLowerCase() !== learner.email.toLowerCase() && !ccList.includes(rev.email)) ccList.push(rev.email); }
+        }
+
+        const from = `${env.FROM_NAME} <${env.FROM_EMAIL}>`;
+        const cc = ccList.length > 0 ? ccList.join(', ') : null;
+        const messageId = await sendSES({ from, to: learner.email, cc, subject: `[Risk Alert] ${subject}`, html }, env);
+        return corsResponse(Response.json({ ok: true, messageId }), corsOrigin);
+      } catch (err) {
+        console.error('risk-alert error:', err.message);
+        return corsResponse(Response.json({ ok: false, error: err.message }, { status: 502 }), corsOrigin);
+      }
+    }
+
     // ── Email route (default POST /) ──────────────────────────────────────────
     let payload;
     try {
@@ -271,6 +314,10 @@ export default {
       console.error('SES error:', err.message);
       return corsResponse(Response.json({ ok: false, error: err.message }, { status: 502 }), corsOrigin);
     }
+  },
+
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(runDailyNotifications(env));
   },
 };
 
@@ -777,6 +824,160 @@ function buildPointsAlertEmail({ toName, courseName, points, prevPoints, status,
     ${cta('View My Points', `${app}/learner/dashboard`)}
   `);
 
+  return { subject, html };
+}
+
+// ─── Daily Notifications (Cron) ───────────────────────────────────────────────
+
+async function runDailyNotifications(env) {
+  const token = await getGoogleAccessToken(env);
+  const pid = env.FIREBASE_PROJECT_ID;
+  const dbUrl = (path) => `https://${pid}-default-rtdb.firebaseio.com/${path}.json?access_token=${encodeURIComponent(token)}`;
+  const r = async (path) => {
+    const res = await fetch(dbUrl(path));
+    const data = await res.json();
+    if (data && typeof data === 'object' && data.error) throw new Error(`Firebase: ${data.error}`);
+    return data;
+  };
+  const pushTo = async (path, data) => {
+    await fetch(dbUrl(path), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  };
+
+  const [allAssignments, allUsers, allPoints] = await Promise.all([
+    r('assignments'), r('users'), r('coursePoints'),
+  ]);
+
+  const userMap = allUsers || {};
+  const reviewerLearners = {};
+
+  for (const [, asg] of Object.entries(allAssignments || {})) {
+    if (asg.status === 'completed') continue;
+    const learner = userMap[asg.learnerId];
+    if (!learner) continue;
+
+    const pts = (allPoints || {})[asg.learnerId]?.[asg.courseId];
+    const total = pts?.total ?? 0;
+    const status = pts?.status || 'unknown';
+    const statusLabel = { on_track: 'On Track', at_risk: 'At Risk', critical: 'Critical' }[status] || 'Pending';
+    const courseName = asg.courseId;
+
+    // Learner in-app notification
+    const learnerMsg = `Daily update: Your "${courseName}" course score is ${total} pts (${statusLabel}). Timeline: ${pts?.timeline ?? 0}, AI: ${pts?.ai ?? 0}, Reviewer: ${pts?.reviewer ?? 0}.`;
+    await pushTo(`notifications/${asg.learnerId}`, {
+      type: 'daily_digest', message: learnerMsg, read: false,
+      createdAt: new Date().toISOString(),
+      metadata: { courseId: asg.courseId, total, status },
+    });
+
+    // Learner email
+    if (learner.email) {
+      try {
+        const { subject, html } = buildDailyLearnerEmail({
+          toName: learner.name, courseName, courseId: asg.courseId,
+          total, status, statusLabel,
+          timeline: pts?.timeline ?? 0, ai: pts?.ai ?? 0, reviewer: pts?.reviewer ?? 0,
+          timelineDetail: pts?.timelineDetail, app: env.APP_URL || 'https://cortex-zeb.web.app',
+        });
+        const cc = learner.email.toLowerCase() === env.CC_EMAIL.toLowerCase() ? null : env.CC_EMAIL;
+        await sendSES({ from: `${env.FROM_NAME} <${env.FROM_EMAIL}>`, to: learner.email, cc, subject, html }, env);
+      } catch (e) { console.error('Daily learner email error:', e.message); }
+    }
+
+    // Aggregate for reviewer
+    if (asg.reviewerId) {
+      if (!reviewerLearners[asg.reviewerId]) reviewerLearners[asg.reviewerId] = [];
+      reviewerLearners[asg.reviewerId].push({
+        learnerId: asg.learnerId, courseId: asg.courseId,
+        learnerName: learner.name || asg.learnerId, courseName,
+        total, status, statusLabel,
+      });
+    }
+  }
+
+  // Reviewer notifications
+  for (const [reviewerId, learners] of Object.entries(reviewerLearners)) {
+    const reviewer = userMap[reviewerId];
+    if (!reviewer) continue;
+
+    const atRiskCount = learners.filter(l => l.status === 'at_risk' || l.status === 'critical').length;
+    const summary = learners.map(l => `${l.learnerName} (${l.courseName}): ${l.total} pts - ${l.statusLabel}`).join('. ');
+
+    await pushTo(`notifications/${reviewerId}`, {
+      type: 'daily_reviewer_digest',
+      message: `Daily review: ${learners.length} active learner(s)${atRiskCount > 0 ? `, ${atRiskCount} at risk` : ''}. ${summary}`,
+      read: false, createdAt: new Date().toISOString(),
+      metadata: { learnerCount: learners.length, atRiskCount },
+    });
+
+    if (reviewer.email) {
+      try {
+        const { subject, html } = buildDailyReviewerEmail({
+          reviewerName: reviewer.name, learners,
+          app: env.APP_URL || 'https://cortex-zeb.web.app',
+        });
+        const cc = reviewer.email.toLowerCase() === env.CC_EMAIL.toLowerCase() ? null : env.CC_EMAIL;
+        await sendSES({ from: `${env.FROM_NAME} <${env.FROM_EMAIL}>`, to: reviewer.email, cc, subject, html }, env);
+      } catch (e) { console.error('Daily reviewer email error:', e.message); }
+    }
+  }
+
+  console.log('Daily notifications complete.');
+}
+
+function buildDailyLearnerEmail({ toName, courseName, courseId, total, status, statusLabel, timeline, ai, reviewer, timelineDetail, app }) {
+  const statusColor = { on_track: '#22c55e', at_risk: '#f59e0b', critical: '#ef4444' }[status] || '#9ca3af';
+  const scoreRow = (label, val) => {
+    const color = val > 0 ? '#22c55e' : val < 0 ? '#ef4444' : '#94a3b8';
+    return `<tr><td style="padding:4px 0;color:#94a3b8;font-size:13px">${label}</td><td style="padding:4px 0;text-align:right;font-weight:700;color:${color};font-size:13px">${val > 0 ? '+' : ''}${val} pts</td></tr>`;
+  };
+  const subject = `Cortex Daily Update: ${courseName} - ${total} pts (${statusLabel})`;
+  const html = layout(`
+    ${h1('Daily Progress Update')}
+    ${p(`Hi ${toName || 'there'}, here is your daily progress update for <strong style="color:#fff">${courseName}</strong>.`)}
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0">
+      <tr><td style="background:#12151f;border-radius:10px;padding:16px;text-align:center;border-left:4px solid ${statusColor}">
+        <div style="font-size:40px;font-weight:800;color:${statusColor};line-height:1">${total}</div>
+        <div style="font-size:12px;font-weight:700;color:${statusColor};text-transform:uppercase;letter-spacing:1px;margin-top:4px">${statusLabel}</div>
+      </td></tr>
+    </table>
+    ${box(`<table width="100%" cellpadding="0" cellspacing="0">
+      ${scoreRow('Timeline Adherence', timeline)}
+      ${scoreRow('AI Engagement', ai)}
+      ${scoreRow('Reviewer Interaction', reviewer)}
+    </table>`)}
+    ${status !== 'on_track' ? p(`<span style="color:#f59e0b">You need <strong style="color:#fff">${Math.max(0, 80 - total)} more points</strong> to reach the 80-point SLA.</span>`) : p(`<span style="color:#22c55e">You are above the SLA. Keep up the good work.</span>`)}
+    ${cta('View My Points', `${app}/learner/points/${courseId}`)}
+  `);
+  return { subject, html };
+}
+
+function buildDailyReviewerEmail({ reviewerName, learners, app }) {
+  const atRiskCount = learners.filter(l => l.status === 'at_risk' || l.status === 'critical').length;
+  const subject = `Cortex Daily Review: ${learners.length} learner(s)${atRiskCount > 0 ? `, ${atRiskCount} at risk` : ''}`;
+  const tableRows = learners.map(l => {
+    const color = l.status === 'on_track' ? '#22c55e' : l.status === 'at_risk' ? '#f59e0b' : '#ef4444';
+    return `<tr>
+      <td style="padding:8px 12px;color:#e2e8f0;font-size:13px;border-bottom:1px solid #2a2d3e">${l.learnerName}</td>
+      <td style="padding:8px 12px;color:#94a3b8;font-size:13px;border-bottom:1px solid #2a2d3e">${l.courseName}</td>
+      <td style="padding:8px 12px;font-weight:700;color:${color};font-size:13px;border-bottom:1px solid #2a2d3e;text-align:right">${l.total} pts</td>
+      <td style="padding:8px 12px;font-weight:600;color:${color};font-size:12px;border-bottom:1px solid #2a2d3e;text-transform:uppercase">${l.statusLabel}</td>
+    </tr>`;
+  }).join('');
+  const html = layout(`
+    ${h1('Daily Learner Review')}
+    ${p(`Hi ${reviewerName || 'there'}, here is a summary of your assigned learners.`)}
+    ${atRiskCount > 0 ? `<div style="background:#ef444418;border:1px solid #ef444440;border-radius:8px;padding:12px 16px;margin-bottom:16px;color:#ef4444;font-size:13px;font-weight:600">${atRiskCount} learner(s) at risk or critical</div>` : ''}
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#12151f;border-radius:8px;overflow:hidden;margin:16px 0">
+      <thead><tr>
+        <th style="padding:10px 12px;color:#4a5068;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;text-align:left;border-bottom:1px solid #2a2d3e">Learner</th>
+        <th style="padding:10px 12px;color:#4a5068;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;text-align:left;border-bottom:1px solid #2a2d3e">Course</th>
+        <th style="padding:10px 12px;color:#4a5068;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;text-align:right;border-bottom:1px solid #2a2d3e">Points</th>
+        <th style="padding:10px 12px;color:#4a5068;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;text-align:left;border-bottom:1px solid #2a2d3e">Status</th>
+      </tr></thead>
+      <tbody>${tableRows}</tbody>
+    </table>
+    ${cta('Open Learner Progress', `${app}/reviewer`)}
+  `);
   return { subject, html };
 }
 
