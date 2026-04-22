@@ -12,7 +12,7 @@ function MiniGauge({ total, status }) {
   const r = 28;
   const circ = Math.PI * r;
   const dash = pct * circ;
-  const color = status === 'on_track' ? '#22c55e' : status === 'at_risk' ? '#f59e0b' : '#ef4444';
+  const color = status === 'on_track' ? '#22c55e' : status === 'at_risk' ? '#f59e0b' : status === 'pending' ? '#9ca3af' : '#ef4444';
   return (
     <svg width="72" height="44" viewBox="-36 -6 72 44" aria-label={`${total} points`}>
       <path d={`M -${r} 0 A ${r} ${r} 0 0 1 ${r} 0`}
@@ -58,8 +58,9 @@ export default function MyPointsPage() {
 
   if (loading) return <PageLoader />;
 
-  const atRisk = rows.filter(r => r.pts && r.pts.status !== 'on_track');
-  const onTrack = rows.filter(r => r.pts && r.pts.status === 'on_track');
+  const withPts = rows.filter(r => r.pts);
+  const atRisk = withPts.filter(r => r.pts.status !== 'on_track');
+  const onTrack = withPts.filter(r => r.pts.status === 'on_track');
 
   return (
     <div>
@@ -80,7 +81,7 @@ export default function MyPointsPage() {
               <span className="mypts-stat-label">On Track</span>
             </div>
             <div className="mypts-stat">
-              <span className="mypts-stat-val" style={{ color: atRisk.length ? '#f59e0b' : '#22c55e' }}>{atRisk.length}</span>
+              <span className="mypts-stat-val" style={{ color: atRisk.length ? '#ef4444' : '#22c55e' }}>{atRisk.length}</span>
               <span className="mypts-stat-label">At Risk / Critical</span>
             </div>
             <div className="mypts-stat">
@@ -98,8 +99,29 @@ export default function MyPointsPage() {
 
           <div className="mypts-cards">
             {rows.map(({ assignment, course, pts }) => {
-              const total = pts?.total ?? 0;
-              const status = pts?.status ?? 'critical';
+              if (!pts) {
+                return (
+                  <div
+                    key={assignment.id}
+                    className="mypts-card"
+                    onClick={() => navigate(`/learner/points/${course.id}?aid=${assignment.id}`)}
+                    style={{ borderLeftColor: '#9ca3af' }}
+                  >
+                    <div className="mypts-card-left">
+                      <MiniGauge total={0} status="pending" />
+                    </div>
+                    <div className="mypts-card-body">
+                      <div className="mypts-card-title">{course.title}</div>
+                      <div className="mypts-card-status" style={{ color: '#9ca3af' }}>
+                        Points not yet available
+                      </div>
+                    </div>
+                    <div className="mypts-card-arrow">→</div>
+                  </div>
+                );
+              }
+              const total = pts.total;
+              const status = pts.status;
               const color = status === 'on_track' ? '#22c55e' : status === 'at_risk' ? '#f59e0b' : '#ef4444';
               const ptgap = Math.max(0, SLA - total);
               return (
@@ -121,9 +143,9 @@ export default function MyPointsPage() {
                       <div className="mypts-card-gap">Need <strong>{ptgap} more pts</strong> for SLA</div>
                     )}
                     <div className="mypts-breakdown-row">
-                      <span title="Timeline">📅 {pts?.timeline ?? 0}</span>
-                      <span title="AI">🤖 {pts?.ai ?? 0}</span>
-                      <span title="Reviewer">💬 {pts?.reviewer ?? 0}</span>
+                      <span title="Timeline">📅 {pts.timeline}</span>
+                      <span title="AI">🤖 {pts.ai}</span>
+                      <span title="Reviewer">💬 {pts.reviewer}</span>
                     </div>
                   </div>
                   <div className="mypts-card-arrow">→</div>

@@ -640,7 +640,15 @@ export function DataProvider({ children }) {
       const json = await res.json();
       if (!json.ok) throw new Error(json.error || 'Failed to calculate points');
       return json;
-    } catch {
+    } catch (err) {
+      console.error('calculateCoursePoints worker failed:', err.message || err);
+      // Fallback: read cached points from Firebase directly
+      try {
+        const snapshot = await get(ref(database, `coursePoints/${userId}/${courseId}`));
+        if (snapshot.exists()) return { ok: true, ...snapshot.val() };
+      } catch {
+        // Firebase read also failed
+      }
       return null;
     }
   }, []);

@@ -70,6 +70,12 @@
       ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'leadership'",
       ".write": "auth != null"
     },
+    "coursePoints": {
+      "$userId": {
+        ".read": "auth != null && (auth.uid === $userId || root.child('users').child(auth.uid).child('role').val() === 'leadership')",
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'leadership'"
+      }
+    },
     "chats": {
       "$assignmentId": {
         ".read": "auth != null && (root.child('assignments').child($assignmentId).child('learnerId').val() === auth.uid || root.child('assignments').child($assignmentId).child('reviewerId').val() === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'leadership')",
