@@ -7,12 +7,6 @@
       "path": "Courses/neural-machine-translation"
     },
     {
-      "id": "course-2-test",
-      "title": "Test Course 2",
-      "description": "Test course for platform validation.",
-      "path": "Courses/Course-2-test"
-    }
-    ,{
       "id": "the-gpu-story",
       "title": "The GPU Story",
       "description": "From pixels to AI accelerators — understand how GPUs work, why they power modern AI, and how to use them effectively.",

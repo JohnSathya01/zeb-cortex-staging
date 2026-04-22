@@ -4,29 +4,26 @@ import '../styles/components.css';
 const STATUS = { idle: 'idle', pass: 'pass', fail: 'fail' };
 const WORKER_URL = import.meta.env.VITE_MAILER_URL;
 
-function triggerAIReview(exercisePrompt, learnerAnswer) {
-  // Fire-and-forget — never awaited, never shown to user
-  fetch(`${WORKER_URL}/ai/review`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ exercisePrompt, learnerAnswer }),
-  })
-    .then(r => r.json())
-    .catch(() => null);
-  // Returns the promise but callers ignore it
-}
+const AI_LOADING_PHRASES = [
+  'Reviewing…', 'Analyzing…', 'Thinking…', 'Processing…',
+  'Evaluating…', 'Cortexing…', 'Inspecting…', 'Reasoning…',
+];
 
 export default function ExerciseCard({ exercise, submission, onSubmit, onAIReview }) {
   const rule = exercise.pattern
     ? { pattern: exercise.pattern, flags: exercise.flags, hint: exercise.hint, explanation: exercise.explanation }
     : null;
 
-  const [code, setCode]       = useState(submission?.text || '');
-  const [status, setStatus]   = useState(submission ? STATUS.pass : STATUS.idle);
+  const [code, setCode]         = useState(submission?.text || '');
+  const [status, setStatus]     = useState(submission ? STATUS.pass : STATUS.idle);
   const [feedback, setFeedback] = useState(submission ? '✓ Previously submitted' : '');
-  const [running, setRunning] = useState(false);
+  const [running, setRunning]   = useState(false);
+  const [aiReview, setAiReview] = useState(submission?.aiReview || null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiPhrase, setAiPhrase]   = useState(AI_LOADING_PHRASES[0]);
   const textareaRef  = useRef(null);
   const lineCountRef = useRef(null);
+  const aiPhraseRef  = useRef(null);
 
   if (!exercise) return null;
 
@@ -41,6 +38,16 @@ export default function ExerciseCard({ exercise, submission, onSubmit, onAIRevie
   }
 
   useEffect(() => { syncLines(); }, [code]);
+
+  useEffect(() => {
+    if (!aiLoading) return;
+    let i = 0;
+    aiPhraseRef.current = setInterval(() => {
+      i = (i + 1) % AI_LOADING_PHRASES.length;
+      setAiPhrase(AI_LOADING_PHRASES[i]);
+    }, 800);
+    return () => clearInterval(aiPhraseRef.current);
+  }, [aiLoading]);
 
   function handleTabKey(e) {
     if (e.key === 'Tab') {
@@ -76,21 +83,29 @@ export default function ExerciseCard({ exercise, submission, onSubmit, onAIRevie
         setFeedback('Could not validate — regex error in rule definition.');
       }
     } else {
-      // Open-ended answer — submit then fire silent AI review in background
+      // Open-ended answer — submit then show AI review to user
       setStatus(STATUS.pass);
-      setFeedback('Submitted! Your answer has been saved for review.');
+      setFeedback('Submitted! Your answer has been saved.');
       await onSubmit?.(exercise.id, code);
 
-      // Background AI review — user never sees this happening
+      // Trigger AI review and show feedback to user
       const prompt = exercise.prompt || exercise.instructions || '';
+      setAiLoading(true);
+      setAiReview(null);
       fetch(`${WORKER_URL}/ai/review`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ exercisePrompt: prompt, learnerAnswer: code }),
       })
         .then(r => r.json())
-        .then(data => { if (data?.ok && data.feedback) onAIReview?.(exercise.id, data.feedback); })
-        .catch(() => {});
+        .then(data => {
+          if (data?.ok && data.feedback) {
+            setAiReview(data.feedback);
+            onAIReview?.(exercise.id, data.feedback);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setAiLoading(false));
     }
 
     setRunning(false);
@@ -157,6 +172,24 @@ export default function ExerciseCard({ exercise, submission, onSubmit, onAIRevie
           <span className="ide-output-icon">{isPassed ? '✓' : '✕'}</span>
           <span className="ide-output-msg">{feedback}</span>
           {isPassed && hasRule && <span className="ide-score-badge">+1 pt</span>}
+        </div>
+      )}
+
+      {/* AI Review Panel — shown for open-ended exercises */}
+      {!hasRule && (aiLoading || aiReview) && (
+        <div className="ide-ai-panel">
+          <div className="ide-ai-header">
+            <span className="ide-ai-icon">✦</span>
+            <span className="ide-ai-label">AI Feedback</span>
+          </div>
+          {aiLoading ? (
+            <div className="ide-ai-loading">
+              <span className="ide-ai-spinner" />
+              <span className="ide-ai-phrase">{aiPhrase}</span>
+            </div>
+          ) : (
+            <p className="ide-ai-body">{aiReview}</p>
+          )}
         </div>
       )}
     </div>
