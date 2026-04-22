@@ -5,9 +5,20 @@ import AssessmentAnswerViewer from '../../components/AssessmentAnswerViewer.jsx'
 import PageLoader from '../../components/PageLoader.jsx';
 import '../../styles/pages.css';
 
+function PointsPill({ pts }) {
+  if (!pts) return <span style={{ color: '#9ca3af', fontSize: '12px' }}>—</span>;
+  const color = pts.status === 'on_track' ? '#22c55e' : pts.status === 'at_risk' ? '#f59e0b' : '#ef4444';
+  const label = { on_track: 'On Track', at_risk: 'At Risk', critical: 'Critical' }[pts.status] || '';
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: 700, background: color + '18', color, border: `1px solid ${color}40` }}>
+      {pts.total} pts · {label}
+    </span>
+  );
+}
+
 export default function ReviewingPage() {
   const { user } = useAuth();
-  const { getAssignments, getUsers, getCourses, getProgressAsReviewer, loading: dataLoading } = useData();
+  const { getAssignments, getUsers, getCourses, getProgressAsReviewer, getCoursePoints, calculateCoursePoints, loading: dataLoading } = useData();
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -41,6 +52,10 @@ export default function ReviewingPage() {
           const completedChapters = progress.completedChapterIds.length;
           const progressPct = totalChapters > 0 ? Math.round((completedChapters / totalChapters) * 100) : 0;
 
+          // Get points (non-blocking)
+          let pts = null;
+          try { pts = await getCoursePoints(assignment.learnerId, assignment.courseId); } catch { /* ignore */ }
+
           built.push({
             key: `${assignment.learnerId}-${assignment.courseId}`,
             assignment,
@@ -52,6 +67,7 @@ export default function ReviewingPage() {
             status: assignment.status,
             course,
             progress,
+            pts,
           });
         } catch {
           // skip this assignment if data fetch fails
@@ -105,6 +121,7 @@ export default function ReviewingPage() {
               <th>Course</th>
               <th>Progress</th>
               <th>Status</th>
+              <th>Points</th>
             </tr>
           </thead>
           <tbody>
@@ -124,6 +141,7 @@ export default function ReviewingPage() {
                       {row.status === 'not_started' ? 'Not Started' : row.status === 'in_progress' ? 'In Progress' : 'Completed'}
                     </span>
                   </td>
+                  <td><PointsPill pts={row.pts} /></td>
                 </tr>
                 {expandedKey === row.key && detailData && (
                   <tr className="detail-row">
@@ -132,6 +150,7 @@ export default function ReviewingPage() {
                         <h4>Chapter Details — {row.learnerName}</h4>
                         <table className="detail-table">
                           <thead><tr><th>Chapter</th><th>Completed</th><th>Assessment</th><th>Exercises</th><th>Actions</th></tr></thead>
+
                           <tbody>
                             {detailData.map((ch) => (
                               <tr key={ch.id}>

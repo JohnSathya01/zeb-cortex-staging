@@ -106,6 +106,84 @@ export default {
       }
     }
 
+    // ── Course Points — Calculate & Save ──────────────────────────────────────
+    if (url.pathname === '/points/calculate') {
+      let body;
+      try { body = await request.json(); } catch { return corsResponse(new Response('Invalid JSON', { status: 400 }), corsOrigin); }
+      const { userId, courseId, totalChapters, assignmentId, sendEmail: doEmail = false } = body;
+      if (!userId || !courseId) return corsResponse(Response.json({ ok: false, error: 'Missing userId or courseId' }, { status: 400 }), corsOrigin);
+      try {
+        const result = await calcCoursePoints({ userId, courseId, totalChapters, assignmentId, doEmail }, env);
+        return corsResponse(Response.json({ ok: true, ...result }), corsOrigin);
+      } catch (err) {
+        console.error('points/calculate error:', err.message);
+        return corsResponse(Response.json({ ok: false, error: err.message }, { status: 502 }), corsOrigin);
+      }
+    }
+
+    // ── Course Points — Get ────────────────────────────────────────────────────
+    if (url.pathname === '/points/get') {
+      let body;
+      try { body = await request.json(); } catch { return corsResponse(new Response('Invalid JSON', { status: 400 }), corsOrigin); }
+      const { userId, courseId } = body;
+      if (!userId || !courseId) return corsResponse(Response.json({ ok: false, error: 'Missing userId or courseId' }, { status: 400 }), corsOrigin);
+      try {
+        const token = await getGoogleAccessToken(env);
+        const projectId = env.FIREBASE_PROJECT_ID;
+        const res = await fetch(`https://${projectId}-default-rtdb.firebaseio.com/coursePoints/${userId}/${courseId}.json`, { headers: { Authorization: `Bearer ${token}` } });
+        const data = await res.json();
+        return corsResponse(Response.json({ ok: true, points: data || null }), corsOrigin);
+      } catch (err) {
+        return corsResponse(Response.json({ ok: false, error: err.message }, { status: 502 }), corsOrigin);
+      }
+    }
+
+    // ── Course Points — At-Risk (leadership) ──────────────────────────────────
+    if (url.pathname === '/points/at-risk') {
+      try {
+        const token = await getGoogleAccessToken(env);
+        const projectId = env.FIREBASE_PROJECT_ID;
+        const dbUrl = (path) => `https://${projectId}-default-rtdb.firebaseio.com/${path}.json`;
+        const r = async (path) => { const res = await fetch(dbUrl(path), { headers: { Authorization: `Bearer ${token}` } }); return res.json(); };
+
+        const [allPoints, allAssignments, allUsers] = await Promise.all([
+          r('coursePoints'),
+          r('assignments'),
+          r('users'),
+        ]);
+
+        const atRisk = [];
+        for (const [uid, courses] of Object.entries(allPoints || {})) {
+          for (const [cid, pts] of Object.entries(courses || {})) {
+            if (pts.status === 'at_risk' || pts.status === 'critical') {
+              const user = (allUsers || {})[uid] || {};
+              // Find assignment
+              const asgEntry = Object.entries(allAssignments || {}).find(([, a]) => a.learnerId === uid && a.courseId === cid);
+              const assignment = asgEntry ? asgEntry[1] : {};
+              atRisk.push({
+                userId: uid,
+                courseId: cid,
+                learnerName: user.name || uid,
+                learnerEmail: user.email || '',
+                points: pts.total,
+                status: pts.status,
+                timeline: pts.timeline,
+                ai: pts.ai,
+                reviewer: pts.reviewer,
+                lastCalculated: pts.lastCalculated,
+                targetCompletionDate: assignment.targetCompletionDate || null,
+                reviewerId: assignment.reviewerId || null,
+              });
+            }
+          }
+        }
+        atRisk.sort((a, b) => a.points - b.points);
+        return corsResponse(Response.json({ ok: true, atRisk }), corsOrigin);
+      } catch (err) {
+        return corsResponse(Response.json({ ok: false, error: err.message }, { status: 502 }), corsOrigin);
+      }
+    }
+
     // ── Progress read (admin) — for reviewer access ───────────────────────────
     if (url.pathname === '/progress') {
       let body;
@@ -510,6 +588,181 @@ and suggest one concrete improvement. Keep your response to 3-5 sentences.`;
   });
 
   return result.response;
+}
+
+// ─── Course Points Engine ─────────────────────────────────────────────────────
+
+async function calcCoursePoints({ userId, courseId, totalChapters, assignmentId, doEmail }, env) {
+  const token = await getGoogleAccessToken(env);
+  const pid = env.FIREBASE_PROJECT_ID;
+  const dbUrl = (path) => `https://${pid}-default-rtdb.firebaseio.com/${path}.json`;
+  const r = async (path) => { const res = await fetch(dbUrl(path), { headers: { Authorization: `Bearer ${token}` } }); return res.json(); };
+  const w = async (path, data) => { await fetch(dbUrl(path), { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); };
+
+  const [progressData, existingPoints] = await Promise.all([
+    r(`progress/${userId}/${courseId}`),
+    r(`coursePoints/${userId}/${courseId}`),
+  ]);
+
+  // Find assignment
+  let assignment = null;
+  let asgId = assignmentId;
+  if (assignmentId) {
+    assignment = await r(`assignments/${assignmentId}`);
+  }
+  if (!assignment) {
+    const all = await r('assignments');
+    for (const [key, a] of Object.entries(all || {})) {
+      if (a.learnerId === userId && a.courseId === courseId) { assignment = a; asgId = key; break; }
+    }
+  }
+
+  // 1. Timeline score (-20 to +40)
+  let timelineScore = 0;
+  const completedCount = (progressData?.completedChapterIds || []).length;
+  const chapTotal = Math.max(totalChapters || 1, 1);
+  const actualPct = Math.min((completedCount / chapTotal) * 100, 100);
+  let timelineDetail = { expectedPct: 0, actualPct: Math.round(actualPct), daysElapsed: 0, totalDays: 0, gap: 0 };
+
+  if (assignment?.assignedAt && assignment?.targetCompletionDate) {
+    const now = Date.now();
+    const start = new Date(assignment.assignedAt).getTime();
+    const end = new Date(assignment.targetCompletionDate).getTime();
+    const totalMs = end - start;
+    if (totalMs > 0) {
+      const elapsedMs = Math.max(0, now - start);
+      const ratio = Math.min(elapsedMs / totalMs, 1.2);
+      const expectedPct = Math.min(ratio * 100, 100);
+      const gap = actualPct - expectedPct;
+      timelineDetail = {
+        expectedPct: Math.round(expectedPct),
+        actualPct: Math.round(actualPct),
+        daysElapsed: Math.round(elapsedMs / 86400000),
+        totalDays: Math.round(totalMs / 86400000),
+        gap: Math.round(gap),
+      };
+      timelineScore = gap >= 0
+        ? Math.min(40, Math.round(20 + gap * 0.5))
+        : Math.max(-20, Math.round(gap * 0.4));
+    }
+  }
+
+  // 2. AI engagement score (-10 to +30)
+  let aiScore = 0;
+  const subs = Object.values(progressData?.exerciseSubmissions || {});
+  const totalSubs = subs.length;
+  const aiSubs = subs.filter(s => s.aiReview && String(s.aiReview).trim().length > 10).length;
+  const aiDetail = { totalSubmissions: totalSubs, aiEngaged: aiSubs, rate: totalSubs > 0 ? Math.round((aiSubs / totalSubs) * 100) : 0 };
+  if (totalSubs > 0) {
+    const rate = aiSubs / totalSubs;
+    if (rate >= 0.9) aiScore = 30;
+    else if (rate >= 0.7) aiScore = 22;
+    else if (rate >= 0.5) aiScore = 15;
+    else if (rate >= 0.25) aiScore = 5;
+    else aiScore = -10;
+  }
+
+  // 3. Reviewer interaction score (0 to +30)
+  let reviewerScore = 0;
+  let reviewerDetail = { learnerMessages: 0 };
+  if (asgId) {
+    const chats = await r(`chats/${asgId}`);
+    const learnerMsgCount = Object.values(chats || {}).filter(m => m.senderId === userId).length;
+    reviewerDetail.learnerMessages = learnerMsgCount;
+    if (learnerMsgCount >= 5) reviewerScore = 30;
+    else if (learnerMsgCount >= 3) reviewerScore = 20;
+    else if (learnerMsgCount >= 1) reviewerScore = 10;
+  }
+
+  const totalScore = timelineScore + aiScore + reviewerScore;
+  const status = totalScore >= 80 ? 'on_track' : totalScore >= 60 ? 'at_risk' : 'critical';
+
+  const pointsData = {
+    total: totalScore, timeline: timelineScore, ai: aiScore, reviewer: reviewerScore,
+    timelineDetail, aiDetail, reviewerDetail,
+    status, lastCalculated: new Date().toISOString(),
+  };
+  await w(`coursePoints/${userId}/${courseId}`, pointsData);
+
+  // Send email if status changed or big point swing
+  if (doEmail) {
+    const prevStatus = existingPoints?.status;
+    const prevTotal = existingPoints?.total ?? null;
+    const shouldNotify = !existingPoints || prevStatus !== status || (prevTotal !== null && Math.abs(prevTotal - totalScore) >= 10);
+
+    if (shouldNotify) {
+      try {
+        const [learner, allUsers] = await Promise.all([r(`users/${userId}`), r('users')]);
+        const reviewerId = assignment?.reviewerId;
+        const reviewer = reviewerId ? ((allUsers || {})[reviewerId] || {}) : null;
+
+        if (learner?.email) {
+          const ccList = [];
+          if (env.CC_EMAIL && learner.email.toLowerCase() !== env.CC_EMAIL.toLowerCase()) ccList.push(env.CC_EMAIL);
+          if (reviewer?.email && reviewer.email.toLowerCase() !== learner.email.toLowerCase()) ccList.push(reviewer.email);
+
+          const app = env.APP_URL || 'https://cortex-zeb.web.app';
+          const { subject, html } = buildPointsAlertEmail({
+            toName: learner.name || 'Learner', courseName: courseId,
+            points: totalScore, prevPoints: prevTotal, status, prevStatus,
+            timeline: timelineScore, ai: aiScore, reviewer: reviewerScore,
+            timelineDetail, app,
+          });
+          const from = `${env.FROM_NAME} <${env.FROM_EMAIL}>`;
+          const cc = ccList.length > 0 ? ccList.join(', ') : null;
+          await sendSES({ from, to: learner.email, cc, subject, html }, env);
+        }
+      } catch (emailErr) {
+        console.error('Points email error:', emailErr.message);
+      }
+    }
+  }
+
+  return pointsData;
+}
+
+function buildPointsAlertEmail({ toName, courseName, points, prevPoints, status, prevStatus, timeline, ai, reviewer, timelineDetail, app }) {
+  const isImproving = prevPoints !== null && points > prevPoints;
+  const statusLabel = { on_track: 'On Track ✓', at_risk: 'At Risk ⚠', critical: 'Critical ✕' }[status] || status;
+  const statusColor = { on_track: '#22c55e', at_risk: '#f59e0b', critical: '#ef4444' }[status] || '#94a3b8';
+  const changeText = prevPoints !== null ? `(${isImproving ? '+' : ''}${points - prevPoints} from ${prevPoints})` : '(first calculation)';
+
+  const scoreRow = (label, val, icon) => {
+    const color = val > 0 ? '#22c55e' : val < 0 ? '#ef4444' : '#94a3b8';
+    return `<tr><td style="padding:6px 0;color:#94a3b8;font-size:13px">${icon} ${label}</td><td style="padding:6px 0;text-align:right;font-weight:700;color:${color};font-size:13px">${val > 0 ? '+' : ''}${val} pts</td></tr>`;
+  };
+
+  const subject = status === 'on_track'
+    ? `Cortex: Course Points Update — ${points} pts (${statusLabel})`
+    : status === 'at_risk'
+      ? `⚠ Cortex: Course at Risk — ${points}/80 pts needed`
+      : `✕ Cortex: Critical Course Alert — ${points} pts`;
+
+  const html = layout(`
+    ${h1(`Course Points Update`)}
+    ${p(`Hi ${toName || 'there'}, here's your latest course points update on Cortex.`)}
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0">
+      <tr>
+        <td style="background:#12151f;border-radius:10px;padding:20px;text-align:center;border-left:4px solid ${statusColor}">
+          <div style="font-size:48px;font-weight:800;color:${statusColor};line-height:1">${points}</div>
+          <div style="font-size:13px;color:#94a3b8;margin-top:4px">Course Points ${changeText}</div>
+          <div style="margin-top:8px;font-size:12px;font-weight:700;color:${statusColor};text-transform:uppercase;letter-spacing:1px">${statusLabel}</div>
+        </td>
+      </tr>
+    </table>
+    ${status !== 'on_track' ? `${p(`<span style="color:#f59e0b">⚠ Minimum required: <strong style="color:#fff">80 points</strong> — you need <strong style="color:#ef4444">${Math.max(0, 80 - points)} more points</strong> to reach the SLA.</span>`)}` : `${p(`<span style="color:#22c55e">✓ You're above the 80-point SLA. Keep it up!</span>`)}`}
+    ${box(`<table width="100%" cellpadding="0" cellspacing="0">
+      ${scoreRow('Timeline Adherence', timeline, '📅')}
+      ${scoreRow('AI Engagement', ai, '🤖')}
+      ${scoreRow('Reviewer Interaction', reviewer, '💬')}
+      <tr><td colspan="2" style="border-top:1px solid #2a2d3e;padding-top:8px;margin-top:8px"></td></tr>
+      <tr><td style="font-size:14px;font-weight:700;color:#e2e8f0;padding-top:4px">Total Score</td><td style="text-align:right;font-size:14px;font-weight:800;color:${statusColor};padding-top:4px">${points} / 100</td></tr>
+    </table>`)}
+    ${timelineDetail.totalDays > 0 ? p(`<span style="color:#4a5068;font-size:13px">Timeline: ${timelineDetail.daysElapsed} of ${timelineDetail.totalDays} days elapsed — you're at ${timelineDetail.actualPct}% progress (expected ${timelineDetail.expectedPct}%).</span>`) : ''}
+    ${cta('View My Points', `${app}/learner/dashboard`)}
+  `);
+
+  return { subject, html };
 }
 
 // ─── Firebase Auth — Create User ──────────────────────────────────────────────

@@ -628,6 +628,53 @@ export function DataProvider({ children }) {
     }
   }, [handlePermissionDenied]);
 
+  // ── Course Points ──
+
+  const calculateCoursePoints = useCallback(async (userId, courseId, totalChapters, assignmentId, sendEmail = false) => {
+    try {
+      const res = await fetch(`${WORKER_URL}/points/calculate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, courseId, totalChapters, assignmentId, sendEmail }),
+      });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error || 'Failed to calculate points');
+      return json;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const getCoursePoints = useCallback(async (userId, courseId) => {
+    try {
+      const res = await fetch(`${WORKER_URL}/points/get`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, courseId }),
+      });
+      const json = await res.json();
+      if (!json.ok) return null;
+      return json.points;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const getAtRiskLearners = useCallback(async () => {
+    try {
+      const res = await fetch(`${WORKER_URL}/points/at-risk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const json = await res.json();
+      if (!json.ok) return [];
+      return json.atRisk || [];
+    } catch {
+      return [];
+    }
+  }, []);
+
   // Saves AI-generated review alongside an exercise submission (silent — never blocks UX)
   const saveExerciseAIReview = useCallback(async (learnerId, courseId, exerciseId, aiReview) => {
     try {
@@ -1115,6 +1162,10 @@ export function DataProvider({ children }) {
     // Timeline
     setTimeline,
     updateTimeline,
+    // Course Points
+    calculateCoursePoints,
+    getCoursePoints,
+    getAtRiskLearners,
     // Cohorts
     getCohorts,
     createCohort,

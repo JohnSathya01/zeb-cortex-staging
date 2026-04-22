@@ -25,6 +25,7 @@ import LeadershipDashboardPage from './pages/leadership/LeadershipDashboardPage.
 import ProfilePage from './pages/learner/ProfilePage.jsx';
 import ReviewingPage from './pages/learner/ReviewingPage.jsx';
 import ReviewChatsPage from './pages/learner/ReviewChatsPage.jsx';
+import CoursePointsPage from './pages/learner/CoursePointsPage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
 import ChangePasswordPage from './pages/ChangePasswordPage.jsx';
 import AppLoader from './components/AppLoader.jsx';
@@ -81,6 +82,7 @@ function AppRoutes() {
               <Route path="profile" element={<ProfilePage />} />
               <Route path="reviewing" element={<ReviewingPage />} />
               <Route path="review-chats" element={<ReviewChatsPage />} />
+              <Route path="points/:courseId" element={<CoursePointsPage />} />
             </Route>
           </Route>
         </Route>

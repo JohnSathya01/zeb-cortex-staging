@@ -1,7 +1,7 @@
 # zeb-cortex-staging
 
 > Cortex — Learning · Capability · Excellence  
-> Powered by **zeb labs**
+> Powered by **zeb**
 
 A modern LMS (Learning Management System) built with React + Firebase, designed for managing learners, courses, assessments, and peer reviews.
 
