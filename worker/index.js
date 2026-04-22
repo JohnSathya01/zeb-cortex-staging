@@ -234,7 +234,7 @@ export default {
     if (url.pathname === '/email/risk-alert') {
       let body;
       try { body = await request.json(); } catch { return corsResponse(new Response('Invalid JSON', { status: 400 }), corsOrigin); }
-      const { userId, courseId } = body;
+      const { userId, courseId, fromEmail, fromName } = body;
       if (!userId || !courseId) return corsResponse(Response.json({ ok: false, error: 'Missing userId or courseId' }, { status: 400 }), corsOrigin);
       try {
         const token = await getGoogleAccessToken(env);
@@ -255,15 +255,19 @@ export default {
           timelineDetail: pts.timelineDetail || {}, app: env.APP_URL || 'https://cortex-zeb.web.app',
         });
 
+        // Sender: use the reviewer who triggered the alert
+        const from = fromEmail
+          ? `${fromName || fromEmail} <${fromEmail}>`
+          : `${env.FROM_NAME} <${env.FROM_EMAIL}>`;
+
         const ccList = [];
         if (env.CC_EMAIL && learner.email.toLowerCase() !== env.CC_EMAIL.toLowerCase()) ccList.push(env.CC_EMAIL);
         const asgEntry = Object.entries(allAssignments || {}).find(([, a]) => a.learnerId === userId && a.courseId === courseId);
         if (asgEntry) {
           const revId = asgEntry[1].reviewerId;
-          if (revId) { const rev = await rd(`users/${revId}`); if (rev?.email && rev.email.toLowerCase() !== learner.email.toLowerCase() && !ccList.includes(rev.email)) ccList.push(rev.email); }
+          if (revId) { const rev = await rd(`users/${revId}`); if (rev?.email && rev.email.toLowerCase() !== learner.email.toLowerCase() && !ccList.includes(rev.email) && rev.email.toLowerCase() !== fromEmail?.toLowerCase()) ccList.push(rev.email); }
         }
 
-        const from = `${env.FROM_NAME} <${env.FROM_EMAIL}>`;
         const cc = ccList.length > 0 ? ccList.join(', ') : null;
         const messageId = await sendSES({ from, to: learner.email, cc, subject: `[Risk Alert] ${subject}`, html }, env);
         return corsResponse(Response.json({ ok: true, messageId }), corsOrigin);

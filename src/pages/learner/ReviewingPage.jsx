@@ -117,7 +117,7 @@ export default function ReviewingPage() {
     const key = row.key;
     setAlertStatus(prev => ({ ...prev, [key]: 'sending' }));
     try {
-      await sendRiskAlertEmail({ userId: row.assignment.learnerId, courseId: row.assignment.courseId });
+      await sendRiskAlertEmail({ userId: row.assignment.learnerId, courseId: row.assignment.courseId, from: { email: user.email, name: user.displayName || user.email } });
       setAlertStatus(prev => ({ ...prev, [key]: 'sent' }));
     } catch (err) {
       console.error('Risk alert failed:', err);
