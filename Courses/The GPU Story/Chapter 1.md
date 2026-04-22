@@ -49,7 +49,7 @@ This is the "brain" of every computer. It's what runs your web browser, your mus
 ```
 CPU Worker:
 ┌─────────────────────────┐
-│  👨‍💼 Smart Worker       │
+│  👨‍💼 Smart Worker        │
 │                         │
 │  Can do ANY task        │
 │  Very fast at ONE thing │
@@ -153,7 +153,7 @@ GPU Army:
 
 ### 1.5 CPU vs. GPU: Side by Side
 
-![CPU vs GPU Architecture](/courses/gpu-story/Difference-between-CPU-and-GPU-Architecture.webp)
+![CPU vs GPU diagram](/courses/gpu-story/Difference-between-CPU-and-GPU-Architecture.jpg)
 ```
 
 
@@ -175,9 +175,9 @@ SCENARIO: You need to paint 10,000 houses
 ┌─────────────────────────────────────────┐
 │  GPU APPROACH                           │
 │                                         │
-│  🏠🏠🏠🏠🏠 → 👷👷👷👷👷                  │
-│  🏠🏠🏠🏠🏠 → 👷👷👷👷👷                  │
-│  🏠🏠🏠🏠🏠 → 👷👷👷👷👷                  │
+│  🏠🏠🏠🏠🏠 → 👷👷👷👷👷           │
+│  🏠🏠🏠🏠🏠 → 👷👷👷👷👷           │
+│  🏠🏠🏠🏠🏠 → 👷👷👷👷👷           │
 │      ... (2,000 painters total)         │
 │                                         │
 │  Each painter paints one house          │
@@ -205,6 +205,8 @@ SCENARIO: You need to paint 10,000 houses
 **VRAM = Video Random Access Memory**
 
 This is the GPU's own memory — separate from your computer's regular RAM.
+
+![VRAM](/courses/gpu-story/vram.png)
 
 **Analogy:**
 
@@ -254,46 +256,7 @@ Training a Model:
 
 Let's trace the complete journey from your Python code to the GPU actually computing.
 
-```
-YOUR CODE:
-┌─────────────────────────────────────────┐
-│  import torch                           │
-│  model.train()                          │
-│  for batch in data:                     │
-│      output = model(batch)              │
-│      loss = compute_loss(output)        │
-│      loss.backward()                    │
-│      optimizer.step()                   │
-└─────────────────────────────────────────┘
-           ↓
-PYTORCH FRAMEWORK:
-┌─────────────────────────────────────────┐
-│  Interprets your Python code            │
-│  Converts to operations                 │
-│  "Matrix multiply A and B"              │
-│  "Add result to C"                      │
-│  "Compute gradients"                    │
-└─────────────────────────────────────────┘
-           ↓
-CUDA (NVIDIA's Language):
-┌─────────────────────────────────────────┐
-│  Converts operations to GPU instructions│
-│  "Load matrix A from VRAM address X"    │
-│  "Load matrix B from VRAM address Y"    │
-│  "Tell GPU cores to multiply"           │
-│  "Store result to VRAM address Z"       │
-└─────────────────────────────────────────┘
-           ↓
-GPU HARDWARE:
-┌─────────────────────────────────────────┐
-│  CUDA cores execute instructions        │
-│  Thousands of multiplications happen    │
-│  in parallel                            │
-│                                         │
-│  Result stored back in VRAM             │
-│  Ready for next operation               │
-└─────────────────────────────────────────┘
-```
+![flow](/courses/gpu-story/flow.png)
 
 **Key Insight:** Your Python code is 10,000x removed from the actual silicon doing the work. Frameworks handle all the complexity.
 
@@ -401,20 +364,6 @@ GPU HARDWARE:
 - [ ] The GPU uses better paint
 - [x] The GPU has thousands of painters working simultaneously
 - [ ] The GPU paints houses in a different order
-
-## Exercise
-
-### Exercise 1: CPU vs GPU — Your Own Analogy
-Chapter 1 uses the "painters" and "chef" analogies to explain CPUs and GPUs. Create your own analogy from everyday life (e.g. sports, school, restaurant, factory, delivery) that explains the same idea.
-
-In your analogy, describe:
-1. What represents the CPU (one smart expert doing tasks one at a time)?
-2. What represents the GPU (many simple workers doing the same task simultaneously)?
-3. What represents VRAM (the limited workspace everything must fit in to run)?
-
-Explain why your GPU equivalent is faster for AI, but your CPU equivalent is still useful for other tasks.
-
-**Submission Type:** text
 
 
 
