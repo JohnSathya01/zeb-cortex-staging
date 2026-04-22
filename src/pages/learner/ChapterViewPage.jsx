@@ -12,7 +12,7 @@ import '../../styles/pages.css';
 export default function ChapterViewPage() {
   const { courseId, chapterId } = useParams();
   const { user } = useAuth();
-  const { getCourseById, getProgress, getAssessments, getExercises, submitAssessment, submitExercise, saveExerciseAIReview, markChapterComplete, getAssignments, getReviewerForAssignment } = useData();
+  const { getCourseById, getProgress, getAssessments, getExercises, submitAssessment, submitExercise, saveExerciseAIReview, markChapterComplete, getAssignments, getReviewerForAssignment, loading: dataLoading } = useData();
   const navigate = useNavigate();
 
   const [chapter, setChapter] = useState(null);
@@ -40,8 +40,8 @@ export default function ChapterViewPage() {
   const [assignmentId, setAssignmentId] = useState(null);
 
   useEffect(() => {
-    if (user && courseId && chapterId) loadChapter();
-  }, [user, courseId, chapterId]);
+    if (user && courseId && chapterId && !dataLoading) loadChapter();
+  }, [user, courseId, chapterId, dataLoading]);
 
   async function loadChapter() {
     try {

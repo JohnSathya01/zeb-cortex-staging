@@ -9,7 +9,7 @@ import '../../styles/pages.css';
 export default function CourseDetailPage() {
   const { courseId } = useParams();
   const { user } = useAuth();
-  const { getCourseById, getProgress, getAssignments, setTimeline, updateTimeline } = useData();
+  const { getCourseById, getProgress, getAssignments, setTimeline, updateTimeline, loading: dataLoading } = useData();
   const navigate = useNavigate();
 
   const [course, setCourse] = useState(null);
@@ -18,8 +18,8 @@ export default function CourseDetailPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (user && courseId) loadCourse();
-  }, [user, courseId]);
+    if (user && courseId && !dataLoading) loadCourse();
+  }, [user, courseId, dataLoading]);
 
   async function loadCourse() {
     try {

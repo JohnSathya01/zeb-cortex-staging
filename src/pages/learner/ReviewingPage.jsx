@@ -7,7 +7,7 @@ import '../../styles/pages.css';
 
 export default function ReviewingPage() {
   const { user } = useAuth();
-  const { getAssignments, getUsers, getCourses, getProgressAsReviewer } = useData();
+  const { getAssignments, getUsers, getCourses, getProgressAsReviewer, loading: dataLoading } = useData();
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -16,8 +16,8 @@ export default function ReviewingPage() {
   const [answerViewer, setAnswerViewer] = useState(null);
 
   useEffect(() => {
-    if (user) loadData();
-  }, [user]);
+    if (user && !dataLoading) loadData();
+  }, [user, dataLoading]);
 
   async function loadData() {
     try {

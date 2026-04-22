@@ -8,15 +8,15 @@ import '../../styles/pages.css';
 
 export default function LearnerDashboardPage() {
   const { user } = useAuth();
-  const { getAssignments, getCourseById, getProgress } = useData();
+  const { getAssignments, getCourseById, getProgress, loading: dataLoading } = useData();
   const navigate = useNavigate();
 
   const [courseCards, setCourseCards] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (user) loadDashboard();
-  }, [user]);
+    if (user && !dataLoading) loadDashboard();
+  }, [user, dataLoading]);
 
   async function loadDashboard() {
     try {
