@@ -16,8 +16,14 @@
     "progress": {
       ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'leadership'",
       "$learnerId": {
-        ".read": "auth != null && auth.uid === $learnerId",
+        ".read": "auth != null && (auth.uid === $learnerId || root.child('users').child(auth.uid).child('role').val() === 'leadership' || root.child('reviewerAccess').child($learnerId).child(auth.uid).val() === true)",
         ".write": "auth != null && auth.uid === $learnerId"
+      }
+    },
+    "reviewerAccess": {
+      "$learnerId": {
+        ".read": "auth != null && (auth.uid === $learnerId || root.child('users').child(auth.uid).child('role').val() === 'leadership')",
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'leadership'"
       }
     },
     "assessments": {

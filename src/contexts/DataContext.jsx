@@ -813,7 +813,12 @@ export function DataProvider({ children }) {
       }
 
       if (reviewerUid) {
+        // Clear old reviewer's access if there was one
+        if (assignment.reviewerId && assignment.reviewerId !== reviewerUid) {
+          await remove(ref(database, `reviewerAccess/${assignment.learnerId}/${assignment.reviewerId}`));
+        }
         await update(ref(database, `assignments/${assignmentId}`), { reviewerId: reviewerUid });
+        await set(ref(database, `reviewerAccess/${assignment.learnerId}/${reviewerUid}`), true);
 
         // Create notifications for both parties
         const [learnerSnap, reviewerSnap] = await Promise.all([
@@ -843,7 +848,10 @@ export function DataProvider({ children }) {
         ]);
         logAudit('assign_reviewer', `Assigned ${reviewerName} as reviewer for ${learnerName} in "${courseName}"`, assignmentId);
       } else {
-        // Clear reviewer
+        // Clear reviewer and revoke access
+        if (assignment.reviewerId) {
+          await remove(ref(database, `reviewerAccess/${assignment.learnerId}/${assignment.reviewerId}`));
+        }
         await update(ref(database, `assignments/${assignmentId}`), { reviewerId: null });
         logAudit('remove_reviewer', `Removed reviewer from assignment for "${assignment.courseId}"`, assignmentId);
       }
