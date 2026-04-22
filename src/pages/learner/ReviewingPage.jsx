@@ -7,7 +7,7 @@ import '../../styles/pages.css';
 
 export default function ReviewingPage() {
   const { user } = useAuth();
-  const { getAssignments, getUsers, getCourses, getProgress } = useData();
+  const { getAssignments, getUsers, getCourses, getProgressAsReviewer } = useData();
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -31,27 +31,31 @@ export default function ReviewingPage() {
 
       const built = [];
       for (const assignment of myReviewing) {
-        const learner = userMap[assignment.learnerId];
-        const course = courseMap[assignment.courseId];
-        if (!learner || !course) continue;
+        try {
+          const learner = userMap[assignment.learnerId];
+          const course = courseMap[assignment.courseId];
+          if (!learner || !course) continue;
 
-        const progress = await getProgress(assignment.learnerId, assignment.courseId);
-        const totalChapters = course.chapters.length;
-        const completedChapters = progress.completedChapterIds.length;
-        const progressPct = totalChapters > 0 ? Math.round((completedChapters / totalChapters) * 100) : 0;
+          const progress = await getProgressAsReviewer(assignment.learnerId, assignment.courseId);
+          const totalChapters = course.chapters?.length ?? 0;
+          const completedChapters = progress.completedChapterIds.length;
+          const progressPct = totalChapters > 0 ? Math.round((completedChapters / totalChapters) * 100) : 0;
 
-        built.push({
-          key: `${assignment.learnerId}-${assignment.courseId}`,
-          assignment,
-          learnerName: learner.name,
-          courseTitle: course.title,
-          progressPct,
-          completedChapters,
-          totalChapters,
-          status: assignment.status,
-          course,
-          progress,
-        });
+          built.push({
+            key: `${assignment.learnerId}-${assignment.courseId}`,
+            assignment,
+            learnerName: learner.name,
+            courseTitle: course.title,
+            progressPct,
+            completedChapters,
+            totalChapters,
+            status: assignment.status,
+            course,
+            progress,
+          });
+        } catch {
+          // skip this assignment if data fetch fails
+        }
       }
       setRows(built);
     } catch { /* handle */ }

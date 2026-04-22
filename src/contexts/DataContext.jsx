@@ -424,6 +424,49 @@ export function DataProvider({ children }) {
     }
   }, [handlePermissionDenied]);
 
+  // Fetch progress via worker (admin access) — used by reviewers who can't read other learners' progress directly
+  const getProgressAsReviewer = useCallback(async (learnerId, courseId) => {
+    try {
+      const res = await fetch(`${WORKER_URL}/progress`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ learnerId, courseId }),
+      });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error || 'Failed to fetch progress');
+      const data = json.data;
+      if (!data) return { learnerId, courseId, completedChapterIds: [], assessmentResults: {}, exerciseSubmissions: {} };
+      const record = {
+        learnerId, courseId,
+        completedChapterIds: data.completedChapterIds || [],
+        assessmentResults: {},
+        exerciseSubmissions: {},
+      };
+      if (data.assessmentResults) {
+        for (const [chId, result] of Object.entries(data.assessmentResults)) {
+          record.assessmentResults[chId] = {
+            answers: result.answers ? decryptField(result.answers) : {},
+            score: result.score !== undefined ? decryptField(result.score) : 0,
+            total: result.total,
+            submittedAt: result.submittedAt,
+          };
+        }
+      }
+      if (data.exerciseSubmissions) {
+        for (const [exId, sub] of Object.entries(data.exerciseSubmissions)) {
+          record.exerciseSubmissions[exId] = {
+            text: sub.text ? decryptField(sub.text) : '',
+            submittedAt: sub.submittedAt,
+            aiReview: sub.aiReview || null,
+          };
+        }
+      }
+      return record;
+    } catch (error) {
+      throw error;
+    }
+  }, []);
+
   const markChapterComplete = useCallback(async (learnerId, courseId, chapterId) => {
     try {
       const progressRef = ref(database, `progress/${learnerId}/${courseId}`);
@@ -1060,6 +1103,7 @@ export function DataProvider({ children }) {
     deleteAssignment,
     // Progress
     getProgress,
+    getProgressAsReviewer,
     markChapterComplete,
     submitAssessment,
     submitExercise,

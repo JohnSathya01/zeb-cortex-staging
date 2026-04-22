@@ -61,6 +61,29 @@ export default {
       }
     }
 
+    // ── Progress read (admin) — for reviewer access ───────────────────────────
+    if (url.pathname === '/progress') {
+      let body;
+      try { body = await request.json(); } catch { return corsResponse(new Response('Invalid JSON', { status: 400 }), corsOrigin); }
+      const { learnerId, courseId } = body;
+      if (!learnerId || !courseId) {
+        return corsResponse(Response.json({ ok: false, error: 'Missing learnerId or courseId' }, { status: 400 }), corsOrigin);
+      }
+      try {
+        const token = await getGoogleAccessToken(env);
+        const projectId = env.FIREBASE_PROJECT_ID;
+        const res = await fetch(
+          `https://${projectId}-default-rtdb.firebaseio.com/progress/${learnerId}/${courseId}.json`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const data = await res.json();
+        return corsResponse(Response.json({ ok: true, data: data || null }), corsOrigin);
+      } catch (err) {
+        console.error('progress error:', err.message);
+        return corsResponse(Response.json({ ok: false, error: err.message }, { status: 502 }), corsOrigin);
+      }
+    }
+
     // ── AI Review route ───────────────────────────────────────────────────────
     if (url.pathname === '/ai/review') {
       let body;
