@@ -130,8 +130,9 @@ export default {
       try {
         const token = await getGoogleAccessToken(env);
         const projectId = env.FIREBASE_PROJECT_ID;
-        const res = await fetch(`https://${projectId}-default-rtdb.firebaseio.com/coursePoints/${userId}/${courseId}.json`, { headers: { Authorization: `Bearer ${token}` } });
+        const res = await fetch(`https://${projectId}-default-rtdb.firebaseio.com/coursePoints/${userId}/${courseId}.json?access_token=${encodeURIComponent(token)}`);
         const data = await res.json();
+        if (data && typeof data === 'object' && data.error) throw new Error(data.error);
         return corsResponse(Response.json({ ok: true, points: data || null }), corsOrigin);
       } catch (err) {
         return corsResponse(Response.json({ ok: false, error: err.message }, { status: 502 }), corsOrigin);
@@ -143,8 +144,13 @@ export default {
       try {
         const token = await getGoogleAccessToken(env);
         const projectId = env.FIREBASE_PROJECT_ID;
-        const dbUrl = (path) => `https://${projectId}-default-rtdb.firebaseio.com/${path}.json`;
-        const r = async (path) => { const res = await fetch(dbUrl(path), { headers: { Authorization: `Bearer ${token}` } }); return res.json(); };
+        const dbUrl = (path) => `https://${projectId}-default-rtdb.firebaseio.com/${path}.json?access_token=${encodeURIComponent(token)}`;
+        const r = async (path) => {
+          const res = await fetch(dbUrl(path));
+          const data = await res.json();
+          if (data && typeof data === 'object' && data.error) throw new Error(data.error);
+          return data;
+        };
 
         const [allPoints, allAssignments, allUsers] = await Promise.all([
           r('coursePoints'),
@@ -196,10 +202,10 @@ export default {
         const token = await getGoogleAccessToken(env);
         const projectId = env.FIREBASE_PROJECT_ID;
         const res = await fetch(
-          `https://${projectId}-default-rtdb.firebaseio.com/progress/${learnerId}/${courseId}.json`,
-          { headers: { Authorization: `Bearer ${token}` } }
+          `https://${projectId}-default-rtdb.firebaseio.com/progress/${learnerId}/${courseId}.json?access_token=${encodeURIComponent(token)}`
         );
         const data = await res.json();
+        if (data && typeof data === 'object' && data.error) throw new Error(data.error);
         return corsResponse(Response.json({ ok: true, data: data || null }), corsOrigin);
       } catch (err) {
         console.error('progress error:', err.message);
@@ -595,9 +601,18 @@ and suggest one concrete improvement. Keep your response to 3-5 sentences.`;
 async function calcCoursePoints({ userId, courseId, totalChapters, assignmentId, doEmail }, env) {
   const token = await getGoogleAccessToken(env);
   const pid = env.FIREBASE_PROJECT_ID;
-  const dbUrl = (path) => `https://${pid}-default-rtdb.firebaseio.com/${path}.json`;
-  const r = async (path) => { const res = await fetch(dbUrl(path), { headers: { Authorization: `Bearer ${token}` } }); return res.json(); };
-  const w = async (path, data) => { await fetch(dbUrl(path), { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); };
+  const dbUrl = (path) => `https://${pid}-default-rtdb.firebaseio.com/${path}.json?access_token=${encodeURIComponent(token)}`;
+  const r = async (path) => {
+    const res = await fetch(dbUrl(path));
+    const data = await res.json();
+    if (data && typeof data === 'object' && data.error) throw new Error(`Firebase read error at ${path}: ${data.error}`);
+    return data;
+  };
+  const w = async (path, data) => {
+    const res = await fetch(dbUrl(path), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+    const result = await res.json();
+    if (result && typeof result === 'object' && result.error) throw new Error(`Firebase write error at ${path}: ${result.error}`);
+  };
 
   const [progressData, existingPoints] = await Promise.all([
     r(`progress/${userId}/${courseId}`),
@@ -723,7 +738,7 @@ async function calcCoursePoints({ userId, courseId, totalChapters, assignmentId,
 
 function buildPointsAlertEmail({ toName, courseName, points, prevPoints, status, prevStatus, timeline, ai, reviewer, timelineDetail, app }) {
   const isImproving = prevPoints !== null && points > prevPoints;
-  const statusLabel = { on_track: 'On Track ✓', at_risk: 'At Risk ⚠', critical: 'Critical ✕' }[status] || status;
+  const statusLabel = { on_track: 'On Track', at_risk: 'At Risk', critical: 'Critical' }[status] || status;
   const statusColor = { on_track: '#22c55e', at_risk: '#f59e0b', critical: '#ef4444' }[status] || '#94a3b8';
   const changeText = prevPoints !== null ? `(${isImproving ? '+' : ''}${points - prevPoints} from ${prevPoints})` : '(first calculation)';
 
@@ -733,10 +748,10 @@ function buildPointsAlertEmail({ toName, courseName, points, prevPoints, status,
   };
 
   const subject = status === 'on_track'
-    ? `Cortex: Course Points Update — ${points} pts (${statusLabel})`
+    ? `Cortex: Course Points Update - ${points} pts (${statusLabel})`
     : status === 'at_risk'
-      ? `⚠ Cortex: Course at Risk — ${points}/80 pts needed`
-      : `✕ Cortex: Critical Course Alert — ${points} pts`;
+      ? `Cortex: Course at Risk - ${points}/80 pts needed`
+      : `Cortex: Critical Course Alert - ${points} pts`;
 
   const html = layout(`
     ${h1(`Course Points Update`)}
@@ -750,11 +765,11 @@ function buildPointsAlertEmail({ toName, courseName, points, prevPoints, status,
         </td>
       </tr>
     </table>
-    ${status !== 'on_track' ? `${p(`<span style="color:#f59e0b">⚠ Minimum required: <strong style="color:#fff">80 points</strong> — you need <strong style="color:#ef4444">${Math.max(0, 80 - points)} more points</strong> to reach the SLA.</span>`)}` : `${p(`<span style="color:#22c55e">✓ You're above the 80-point SLA. Keep it up!</span>`)}`}
+    ${status !== 'on_track' ? `${p(`<span style="color:#f59e0b">Minimum required: <strong style="color:#fff">80 points</strong> &mdash; you need <strong style="color:#ef4444">${Math.max(0, 80 - points)} more points</strong> to reach the SLA.</span>`)}` : `${p(`<span style="color:#22c55e">You're above the 80-point SLA. Keep it up!</span>`)}`}
     ${box(`<table width="100%" cellpadding="0" cellspacing="0">
-      ${scoreRow('Timeline Adherence', timeline, '📅')}
-      ${scoreRow('AI Engagement', ai, '🤖')}
-      ${scoreRow('Reviewer Interaction', reviewer, '💬')}
+      ${scoreRow('Timeline Adherence', timeline, '')}
+      ${scoreRow('AI Engagement', ai, '')}
+      ${scoreRow('Reviewer Interaction', reviewer, '')}
       <tr><td colspan="2" style="border-top:1px solid #2a2d3e;padding-top:8px;margin-top:8px"></td></tr>
       <tr><td style="font-size:14px;font-weight:700;color:#e2e8f0;padding-top:4px">Total Score</td><td style="text-align:right;font-size:14px;font-weight:800;color:${statusColor};padding-top:4px">${points} / 100</td></tr>
     </table>`)}
@@ -816,7 +831,7 @@ async function getGoogleAccessToken(env) {
   const claims = b64url(JSON.stringify({
     iss: clientEmail,
     sub: clientEmail,
-    scope: 'https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/firebase',
+    scope: 'https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/firebase https://www.googleapis.com/auth/firebase.database https://www.googleapis.com/auth/userinfo.email',
     aud: 'https://oauth2.googleapis.com/token',
     iat: now,
     exp: now + 3600,

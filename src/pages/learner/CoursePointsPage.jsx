@@ -15,7 +15,6 @@ function ScoreGauge({ score }) {
   const color = score >= SLA_MIN ? '#22c55e' : score >= 60 ? '#f59e0b' : '#ef4444';
   // SLA marker position at norm = (80+30)/130
   const slaNorm = 110 / 130;
-  const slaAngle = Math.PI * (1 - slaNorm); // angle from right
   const slaMx = r * Math.cos(Math.PI - slaNorm * Math.PI);
   const slaMy = -r * Math.sin(slaNorm * Math.PI);
 
@@ -39,14 +38,13 @@ function ScoreGauge({ score }) {
   );
 }
 
-function ScoreCard({ label, icon, score, maxScore, minScore = 0, children }) {
+function ScoreCard({ label, score, maxScore, minScore = 0, children }) {
   const norm = Math.max(0, (score - minScore) / (maxScore - minScore));
   const color = score > 0 ? '#22c55e' : score < 0 ? '#ef4444' : '#9ca3af';
   const barColor = score > 0 ? '#22c55e' : score < 0 ? '#ef4444' : '#d1d5db';
   return (
     <div className="pts-score-card">
       <div className="pts-score-card-header">
-        <span className="pts-score-icon">{icon}</span>
         <span className="pts-score-label">{label}</span>
         <span className="pts-score-value" style={{ color }}>{score > 0 ? '+' : ''}{score} pts</span>
       </div>
@@ -133,12 +131,12 @@ export default function CoursePointsPage() {
     <div>
       <div className="page-header">
         <div>
-          <Link to="/learner/dashboard" className="back-link">← Back to My Courses</Link>
+          <Link to="/learner/dashboard" className="back-link">&larr; Back to My Courses</Link>
           <h1>Course Points</h1>
           {course && <div style={{ fontSize: '13px', color: 'var(--gray-500)', marginTop: '4px' }}>{course.title}</div>}
         </div>
         <button className="btn btn-secondary" onClick={handleRecalculate} disabled={recalcing}>
-          {recalcing ? 'Refreshing…' : '↻ Refresh Points'}
+          {recalcing ? 'Refreshing...' : 'Refresh Points'}
         </button>
       </div>
 
@@ -151,7 +149,7 @@ export default function CoursePointsPage() {
             <div className="pts-gauge-wrap">
               <ScoreGauge score={total} />
               <div className="pts-status-pill" style={{ background: statusColor + '18', color: statusColor, border: `1px solid ${statusColor}40` }}>
-                {status === 'on_track' ? '✓' : status === 'at_risk' ? '⚠' : '✕'} {statusLabel}
+                {statusLabel}
               </div>
             </div>
             <div className="pts-hero-info">
@@ -184,7 +182,7 @@ export default function CoursePointsPage() {
           {/* Breakdown cards */}
           <h2 className="pts-section-title">Points Breakdown</h2>
           <div className="pts-cards-grid">
-            <ScoreCard label="Timeline Adherence" icon="📅" score={points.timeline ?? 0} maxScore={40} minScore={-20}>
+            <ScoreCard label="Timeline Adherence" score={points.timeline ?? 0} maxScore={40} minScore={-20}>
               {points.timelineDetail?.totalDays > 0 ? (
                 <>
                   <div className="pts-detail-row">
@@ -206,15 +204,15 @@ export default function CoursePointsPage() {
                     <p className="pts-tip">You're behind schedule. Complete more chapters to earn back points.</p>
                   )}
                   {points.timelineDetail.gap >= 0 && (
-                    <p className="pts-tip pts-tip--ok">You're on track or ahead of schedule!</p>
+                    <p className="pts-tip pts-tip--ok">You're on track or ahead of schedule.</p>
                   )}
                 </>
               ) : (
-                <p className="pts-tip">No due date set — points unavailable for this category.</p>
+                <p className="pts-tip">No due date set -- points unavailable for this category.</p>
               )}
             </ScoreCard>
 
-            <ScoreCard label="AI Engagement" icon="🤖" score={points.ai ?? 0} maxScore={30} minScore={-10}>
+            <ScoreCard label="AI Engagement" score={points.ai ?? 0} maxScore={30} minScore={-10}>
               {points.aiDetail?.totalSubmissions > 0 ? (
                 <>
                   <div className="pts-detail-row">
@@ -230,7 +228,7 @@ export default function CoursePointsPage() {
                     <p className="pts-tip">Interact with AI after each exercise answer to boost this score.</p>
                   )}
                   {points.aiDetail.rate >= 90 && (
-                    <p className="pts-tip pts-tip--ok">Excellent AI engagement — maximum points!</p>
+                    <p className="pts-tip pts-tip--ok">Excellent AI engagement -- maximum points.</p>
                   )}
                 </>
               ) : (
@@ -238,7 +236,7 @@ export default function CoursePointsPage() {
               )}
             </ScoreCard>
 
-            <ScoreCard label="Reviewer Interaction" icon="💬" score={points.reviewer ?? 0} maxScore={30} minScore={0}>
+            <ScoreCard label="Reviewer Interaction" score={points.reviewer ?? 0} maxScore={30} minScore={0}>
               <div className="pts-detail-row">
                 <span>Messages sent</span><strong>{points.reviewerDetail?.learnerMessages ?? 0}</strong>
               </div>
@@ -249,7 +247,7 @@ export default function CoursePointsPage() {
                 <p className="pts-tip">Chat with your reviewer to earn up to 30 points.</p>
               )}
               {(points.reviewerDetail?.learnerMessages ?? 0) >= 5 && (
-                <p className="pts-tip pts-tip--ok">Great engagement with your reviewer!</p>
+                <p className="pts-tip pts-tip--ok">Great engagement with your reviewer.</p>
               )}
             </ScoreCard>
           </div>
@@ -258,10 +256,10 @@ export default function CoursePointsPage() {
           <div className="pts-explainer">
             <h3>How Points Work</h3>
             <div className="pts-explainer-grid">
-              <div><strong>📅 Timeline (max 40)</strong><p>Earn up to 40 pts for being on or ahead of schedule. Points go negative (down to -20) if you fall behind.</p></div>
-              <div><strong>🤖 AI Engagement (max 30)</strong><p>Earn up to 30 pts for using AI review on your exercises. Low usage (-10) if you skip AI review.</p></div>
-              <div><strong>💬 Reviewer Interaction (max 30)</strong><p>Earn up to 30 pts for chatting with your reviewer. 5+ messages earns full points.</p></div>
-              <div><strong>⚡ SLA (minimum 80)</strong><p>You must maintain at least 80 points. Below 80 is At Risk; below 60 is Critical.</p></div>
+              <div><strong>Timeline (max 40)</strong><p>Earn up to 40 pts for being on or ahead of schedule. Points go negative (down to -20) if you fall behind.</p></div>
+              <div><strong>AI Engagement (max 30)</strong><p>Earn up to 30 pts for using AI review on your exercises. Low usage (-10) if you skip AI review.</p></div>
+              <div><strong>Reviewer Interaction (max 30)</strong><p>Earn up to 30 pts for chatting with your reviewer. 5+ messages earns full points.</p></div>
+              <div><strong>SLA (minimum 80)</strong><p>You must maintain at least 80 points. Below 80 is At Risk; below 60 is Critical.</p></div>
             </div>
           </div>
         </>

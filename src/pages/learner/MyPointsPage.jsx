@@ -92,7 +92,7 @@ export default function MyPointsPage() {
 
           {atRisk.length > 0 && (
             <div className="pts-alert-banner" style={{ marginBottom: '20px' }}>
-              <span className="pts-alert-icon">⚠</span>
+              <span className="pts-alert-icon">!</span>
               <span><strong>{atRisk.length} course{atRisk.length > 1 ? 's are' : ' is'} below the 80-point SLA.</strong> Take action to get back on track.</span>
             </div>
           )}
@@ -116,7 +116,7 @@ export default function MyPointsPage() {
                         Points not yet available
                       </div>
                     </div>
-                    <div className="mypts-card-arrow">→</div>
+                    <div className="mypts-card-arrow">&rsaquo;</div>
                   </div>
                 );
               }
@@ -137,18 +137,20 @@ export default function MyPointsPage() {
                   <div className="mypts-card-body">
                     <div className="mypts-card-title">{course.title}</div>
                     <div className="mypts-card-status" style={{ color }}>
-                      {status === 'on_track' ? '✓ On Track' : status === 'at_risk' ? '⚠ At Risk' : '✕ Critical'}
+                      {status === 'on_track' ? 'On Track' : status === 'at_risk' ? 'At Risk' : 'Critical'}
                     </div>
                     {ptgap > 0 && (
                       <div className="mypts-card-gap">Need <strong>{ptgap} more pts</strong> for SLA</div>
                     )}
                     <div className="mypts-breakdown-row">
-                      <span title="Timeline">📅 {pts.timeline}</span>
-                      <span title="AI">🤖 {pts.ai}</span>
-                      <span title="Reviewer">💬 {pts.reviewer}</span>
+                      <span title="Timeline">Timeline {pts.timeline}</span>
+                      <span className="mypts-breakdown-sep">|</span>
+                      <span title="AI Engagement">AI {pts.ai}</span>
+                      <span className="mypts-breakdown-sep">|</span>
+                      <span title="Reviewer">Reviewer {pts.reviewer}</span>
                     </div>
                   </div>
-                  <div className="mypts-card-arrow">→</div>
+                  <div className="mypts-card-arrow">&rsaquo;</div>
                 </div>
               );
             })}
@@ -157,10 +159,10 @@ export default function MyPointsPage() {
           <div className="pts-explainer" style={{ marginTop: '28px' }}>
             <h3>How Points Are Calculated</h3>
             <div className="pts-explainer-grid">
-              <div><strong>📅 Timeline (max 40)</strong><p>On/ahead of schedule = up to +40. Behind schedule = up to -20.</p></div>
-              <div><strong>🤖 AI Engagement (max 30)</strong><p>Use AI review on exercises for up to +30. Ignoring AI = -10 pts.</p></div>
-              <div><strong>💬 Reviewer Chat (max 30)</strong><p>Send 5+ messages to your reviewer for full 30 pts.</p></div>
-              <div><strong>⚡ SLA = 80 pts</strong><p>Minimum score required. Below 80 is At Risk, below 60 is Critical.</p></div>
+              <div><strong>Timeline (max 40)</strong><p>On/ahead of schedule = up to +40. Behind schedule = up to -20.</p></div>
+              <div><strong>AI Engagement (max 30)</strong><p>Use AI review on exercises for up to +30. Ignoring AI = -10 pts.</p></div>
+              <div><strong>Reviewer Chat (max 30)</strong><p>Send 5+ messages to your reviewer for full 30 pts.</p></div>
+              <div><strong>SLA = 80 pts</strong><p>Minimum score required. Below 80 is At Risk, below 60 is Critical.</p></div>
             </div>
           </div>
         </>

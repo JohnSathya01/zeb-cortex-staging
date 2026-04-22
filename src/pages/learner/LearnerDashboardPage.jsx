@@ -73,7 +73,7 @@ export default function LearnerDashboardPage() {
 
       {atRiskCount > 0 && (
         <div className="pts-alert-banner">
-          <span className="pts-alert-icon">⚠</span>
+          <span className="pts-alert-icon">!</span>
           <span>
             <strong>{atRiskCount} course{atRiskCount > 1 ? 's are' : ' is'} at risk</strong>
             {' '}— below the 80-point SLA. Click a course card to see details.
@@ -125,14 +125,14 @@ export default function LearnerDashboardPage() {
                     <PointsBadge total={points.total} status={points.status} />
                     <span className="pts-sla-label">
                       {points.status === 'on_track'
-                        ? '✓ Above 80-pt SLA'
-                        : `⚠ Need ${Math.max(0, 80 - points.total)} more pts for SLA`}
+                        ? 'Above 80-pt SLA'
+                        : `Need ${Math.max(0, 80 - points.total)} more pts for SLA`}
                     </span>
                   </>
                 ) : (
                   <span className="pts-sla-label" style={{ color: 'var(--gray-400)' }}>Points not yet available</span>
                 )}
-                <span className="pts-view-link">View Points →</span>
+                <span className="pts-view-link">View Points &rsaquo;</span>
               </div>
             </div>
           ))}
