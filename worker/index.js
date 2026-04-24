@@ -327,6 +327,21 @@ export default {
   },
 };
 
+/** Count weekdays (Mon-Fri) between two dates, inclusive of start, exclusive of end */
+function countWeekdays(startDate, endDate) {
+  let count = 0;
+  const d = new Date(startDate);
+  d.setHours(0, 0, 0, 0);
+  const end = new Date(endDate);
+  end.setHours(0, 0, 0, 0);
+  while (d < end) {
+    const day = d.getDay();
+    if (day !== 0 && day !== 6) count++;
+    d.setDate(d.getDate() + 1);
+  }
+  return count;
+}
+
 function corsResponse(response, origin) {
   const r = new Response(response.body, response);
   r.headers.set('Access-Control-Allow-Origin', origin);
@@ -698,15 +713,17 @@ async function calcCoursePoints({ userId, courseId, totalChapters, assignmentId,
     const end = new Date(assignment.targetCompletionDate).getTime();
     const totalMs = end - start;
     if (totalMs > 0) {
-      const elapsedMs = Math.max(0, now - start);
-      const ratio = Math.min(elapsedMs / totalMs, 1.2);
+      // Count only weekdays (Mon-Fri) for timeline calculation
+      const totalWeekdays = countWeekdays(new Date(start), new Date(end));
+      const elapsedWeekdays = countWeekdays(new Date(start), new Date(Math.min(now, end)));
+      const ratio = totalWeekdays > 0 ? Math.min(elapsedWeekdays / totalWeekdays, 1.2) : 0;
       const expectedPct = Math.min(ratio * 100, 100);
       const gap = actualPct - expectedPct;
       timelineDetail = {
         expectedPct: Math.round(expectedPct),
         actualPct: Math.round(actualPct),
-        daysElapsed: Math.round(elapsedMs / 86400000),
-        totalDays: Math.round(totalMs / 86400000),
+        daysElapsed: elapsedWeekdays,
+        totalDays: totalWeekdays,
         gap: Math.round(gap),
       };
       timelineScore = gap >= 0
@@ -836,6 +853,13 @@ function buildPointsAlertEmail({ toName, courseName, points, prevPoints, status,
 // ─── Daily Notifications (Cron) ───────────────────────────────────────────────
 
 async function runDailyNotifications(env) {
+  // Skip weekends — no notifications on Sat/Sun
+  const today = new Date().getUTCDay();
+  if (today === 0 || today === 6) {
+    console.log('Weekend — skipping daily notifications.');
+    return;
+  }
+
   const token = await getGoogleAccessToken(env);
   const pid = env.FIREBASE_PROJECT_ID;
   const dbUrl = (path) => `https://${pid}-default-rtdb.firebaseio.com/${path}.json?access_token=${encodeURIComponent(token)}`;
