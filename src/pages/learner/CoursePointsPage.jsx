@@ -71,16 +71,34 @@ export default function CoursePointsPage() {
   const [searchParams] = useSearchParams();
   const assignmentId = searchParams.get('aid');
   const { user } = useAuth();
-  const { getCourseById, calculateCoursePoints, getCoursePoints, loading: dataLoading } = useData();
+  const { getCourseById, calculateCoursePoints, getCoursePoints, getReviewerFeedback, loading: dataLoading } = useData();
 
   const [points, setPoints] = useState(null);
   const [course, setCourse] = useState(null);
+  const [feedbackTexts, setFeedbackTexts] = useState(null);
   const [loading, setLoading] = useState(true);
   const [recalcing, setRecalcing] = useState(false);
 
   useEffect(() => {
     if (user && !dataLoading) load();
   }, [user, dataLoading, courseId]);
+
+  async function loadFeedbackTexts() {
+    if (!assignmentId) return;
+    try {
+      const fb = await getReviewerFeedback(assignmentId);
+      let texts = null;
+      if (fb?.final?.feedbackTexts) {
+        texts = fb.final.feedbackTexts;
+      } else if (fb?.weekly) {
+        const weeks = Object.entries(fb.weekly).sort((a, b) => b[0].localeCompare(a[0]));
+        if (weeks.length > 0 && weeks[0][1]?.feedbackTexts) {
+          texts = weeks[0][1].feedbackTexts;
+        }
+      }
+      setFeedbackTexts(texts);
+    } catch { /* ignore */ }
+  }
 
   async function load() {
     setLoading(true);
@@ -93,6 +111,7 @@ export default function CoursePointsPage() {
       if (existing) {
         setPoints(existing);
         setLoading(false);
+        loadFeedbackTexts();
         // Silently recalculate in background
         if (c) {
           const fresh = await calculateCoursePoints(user.uid, courseId, c.chapters.length, assignmentId, false);
@@ -104,6 +123,7 @@ export default function CoursePointsPage() {
           const fresh = await calculateCoursePoints(user.uid, courseId, c.chapters.length, assignmentId, false);
           if (fresh) setPoints(fresh);
         }
+        loadFeedbackTexts();
         setLoading(false);
       }
     } catch {
@@ -249,9 +269,9 @@ export default function CoursePointsPage() {
                       <div className="pts-detail-row">
                         <span>{label}</span><strong>{points.reviewerDetail[key] ?? 0}/10</strong>
                       </div>
-                      {points.reviewerDetail.feedbackTexts?.[key] && (
+                      {(points.reviewerDetail.feedbackTexts?.[key] || feedbackTexts?.[key]) && (
                         <p style={{ fontSize: '12px', color: 'var(--gray-500)', margin: '2px 0 8px', lineHeight: '1.4', fontStyle: 'italic' }}>
-                          "{points.reviewerDetail.feedbackTexts[key]}"
+                          "{points.reviewerDetail.feedbackTexts?.[key] || feedbackTexts[key]}"
                         </p>
                       )}
                     </div>
