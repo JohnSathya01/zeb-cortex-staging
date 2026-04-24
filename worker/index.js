@@ -23,6 +23,7 @@ const ALLOWED_ORIGINS = [
 
 export default {
   async fetch(request, env) {
+    _leadershipEmailsCache = null; // reset per-request
     const origin = request.headers.get('Origin') || '';
     const corsOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
 
@@ -280,9 +281,10 @@ export default {
         `);
 
         const from = reviewerEmail ? `${reviewerName || reviewerEmail} <${reviewerEmail}>` : `${env.FROM_NAME} <${env.FROM_EMAIL}>`;
-        const to = 'john.sathya@zeb.co, Sivasaran.Sekaran@zeb.co';
+        const leadershipEmails = await getLeadershipCcList(env, []);
+        const to = leadershipEmails.length > 0 ? leadershipEmails.join(', ') : env.CC_EMAIL;
         const ccList = [];
-        if (reviewerEmail) ccList.push(reviewerEmail);
+        if (reviewerEmail && !leadershipEmails.includes(reviewerEmail.toLowerCase())) ccList.push(reviewerEmail);
         const cc = ccList.length > 0 ? ccList.join(', ') : null;
         const messageId = await sendSES({ from, to, cc, subject, html }, env);
         return corsResponse(Response.json({ ok: true, messageId }), corsOrigin);
@@ -317,8 +319,7 @@ export default {
           ${cta('Submit Final Feedback', `${app}/reviewer`)}
         `);
 
-        const ccList = [];
-        if (env.CC_EMAIL && reviewer.email.toLowerCase() !== env.CC_EMAIL.toLowerCase()) ccList.push(env.CC_EMAIL);
+        const ccList = await getLeadershipCcList(env, [reviewer.email]);
         const cc = ccList.length > 0 ? ccList.join(', ') : null;
         const messageId = await sendSES({ from: `${env.FROM_NAME} <${env.FROM_EMAIL}>`, to: reviewer.email, cc, subject, html }, env);
         return corsResponse(Response.json({ ok: true, messageId }), corsOrigin);
@@ -358,10 +359,9 @@ export default {
           ? `${fromName || fromEmail} <${fromEmail}>`
           : `${env.FROM_NAME} <${env.FROM_EMAIL}>`;
 
-        const ccList = [];
-        if (env.CC_EMAIL && learner.email.toLowerCase() !== env.CC_EMAIL.toLowerCase()) ccList.push(env.CC_EMAIL);
+        const ccList = await getLeadershipCcList(env, [learner.email]);
         // Always CC the sender (reviewer) so they get a copy
-        if (fromEmail && fromEmail.toLowerCase() !== learner.email.toLowerCase() && !ccList.includes(fromEmail)) ccList.push(fromEmail);
+        if (fromEmail && fromEmail.toLowerCase() !== learner.email.toLowerCase() && !ccList.includes(fromEmail.toLowerCase())) ccList.push(fromEmail);
         const asgEntry = Object.entries(allAssignments || {}).find(([, a]) => a.learnerId === userId && a.courseId === courseId);
         if (asgEntry) {
           const revId = asgEntry[1].reviewerId;
@@ -399,8 +399,9 @@ export default {
         ? `${fromName || fromEmail} <${fromEmail}>`
         : `${env.FROM_NAME} <${env.FROM_EMAIL}>`;
 
-    // CC john.sathya@zeb.co unless he's already the recipient
-    const cc = toEmail.toLowerCase() === env.CC_EMAIL.toLowerCase() ? null : env.CC_EMAIL;
+    // CC all leadership users
+    const leadershipCc = await getLeadershipCcList(env, [toEmail]);
+    const cc = leadershipCc.length > 0 ? leadershipCc.join(', ') : null;
 
     const app = env.APP_URL || 'https://cortex-zeb.web.app';
 
@@ -438,6 +439,30 @@ function countWeekdays(startDate, endDate) {
     d.setDate(d.getDate() + 1);
   }
   return count;
+}
+
+/** Fetch all leadership user emails for CC. Results cached per-request via closure. */
+let _leadershipEmailsCache = null;
+async function getLeadershipCcList(env, excludeEmails = []) {
+  if (!_leadershipEmailsCache) {
+    try {
+      const token = await getGoogleAccessToken(env);
+      const pid = env.FIREBASE_PROJECT_ID;
+      const res = await fetch(`https://${pid}-default-rtdb.firebaseio.com/users.json?access_token=${encodeURIComponent(token)}`);
+      const users = await res.json();
+      if (users && typeof users === 'object' && !users.error) {
+        _leadershipEmailsCache = Object.values(users)
+          .filter(u => u.role === 'leadership' && u.email)
+          .map(u => u.email.toLowerCase());
+      } else {
+        _leadershipEmailsCache = [];
+      }
+    } catch {
+      _leadershipEmailsCache = [];
+    }
+  }
+  const excluded = new Set(excludeEmails.map(e => e.toLowerCase()));
+  return _leadershipEmailsCache.filter(e => !excluded.has(e));
 }
 
 function corsResponse(response, origin) {
@@ -889,9 +914,8 @@ async function calcCoursePoints({ userId, courseId, totalChapters, assignmentId,
         const reviewer = reviewerId ? ((allUsers || {})[reviewerId] || {}) : null;
 
         if (learner?.email) {
-          const ccList = [];
-          if (env.CC_EMAIL && learner.email.toLowerCase() !== env.CC_EMAIL.toLowerCase()) ccList.push(env.CC_EMAIL);
-          if (reviewer?.email && reviewer.email.toLowerCase() !== learner.email.toLowerCase()) ccList.push(reviewer.email);
+          const ccList = await getLeadershipCcList(env, [learner.email]);
+          if (reviewer?.email && reviewer.email.toLowerCase() !== learner.email.toLowerCase() && !ccList.includes(reviewer.email.toLowerCase())) ccList.push(reviewer.email);
 
           const app = env.APP_URL || 'https://cortex-zeb.web.app';
           const { subject, html } = buildPointsAlertEmail({
@@ -1087,7 +1111,8 @@ async function runDailyNotifications(env) {
           timeline: pts?.timeline ?? 0, ai: pts?.ai ?? 0, reviewer: pts?.reviewer ?? 0,
           timelineDetail: pts?.timelineDetail, app: env.APP_URL || 'https://cortex-zeb.web.app',
         });
-        const cc = learner.email.toLowerCase() === env.CC_EMAIL.toLowerCase() ? null : env.CC_EMAIL;
+        const ccEmails = await getLeadershipCcList(env, [learner.email]);
+        const cc = ccEmails.length > 0 ? ccEmails.join(', ') : null;
         await sendSES({ from: `${env.FROM_NAME} <${env.FROM_EMAIL}>`, to: learner.email, cc, subject, html }, env);
       } catch (e) { console.error('Daily learner email error:', e.message); }
     }
@@ -1124,7 +1149,8 @@ async function runDailyNotifications(env) {
           reviewerName: reviewer.name, learners,
           app: env.APP_URL || 'https://cortex-zeb.web.app',
         });
-        const cc = reviewer.email.toLowerCase() === env.CC_EMAIL.toLowerCase() ? null : env.CC_EMAIL;
+        const ccR = await getLeadershipCcList(env, [reviewer.email]);
+        const cc = ccR.length > 0 ? ccR.join(', ') : null;
         await sendSES({ from: `${env.FROM_NAME} <${env.FROM_EMAIL}>`, to: reviewer.email, cc, subject, html }, env);
       } catch (e) { console.error('Daily reviewer email error:', e.message); }
     }
@@ -1164,7 +1190,8 @@ async function runDailyNotifications(env) {
               </table>
               ${cta('Open Learner Progress', `${(env.APP_URL || 'https://cortex-zeb.web.app')}/reviewer`)}
             `);
-            const cc = reviewer.email.toLowerCase() === env.CC_EMAIL.toLowerCase() ? null : env.CC_EMAIL;
+            const ccFri = await getLeadershipCcList(env, [reviewer.email]);
+            const cc = ccFri.length > 0 ? ccFri.join(', ') : null;
             await sendSES({ from: `${env.FROM_NAME} <${env.FROM_EMAIL}>`, to: reviewer.email, cc, subject, html }, env);
           } catch (e) { console.error('Feedback reminder email error:', e.message); }
         }
