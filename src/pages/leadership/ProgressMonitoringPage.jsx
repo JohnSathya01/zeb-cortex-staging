@@ -44,39 +44,40 @@ export default function ProgressMonitoringPage() {
     const learnerMap = Object.fromEntries(learnerList.map((l) => [l.id, l]));
     const courseMap = Object.fromEntries(allCourses.map((c) => [c.id, c]));
 
-    const built = [];
-    for (const assignment of allAssignments) {
-      const learner = learnerMap[assignment.learnerId];
-      const course = courseMap[assignment.courseId];
-      if (!learner || !course) continue;
+    const rowPromises = allAssignments.map(async (assignment) => {
+      try {
+        const learner = learnerMap[assignment.learnerId];
+        const course = courseMap[assignment.courseId];
+        if (!learner || !course) return null;
 
-      const progress = await getProgress(assignment.learnerId, assignment.courseId);
-      const totalChapters = course.chapters.length;
-      const completedChapters = progress.completedChapterIds.length;
-      const progressPct = totalChapters > 0
-        ? Math.round((completedChapters / totalChapters) * 100)
-        : 0;
+        const progress = await getProgress(assignment.learnerId, assignment.courseId);
+        const totalChapters = course.chapters.length;
+        const completedChapters = progress.completedChapterIds.length;
+        const progressPct = totalChapters > 0
+          ? Math.round((completedChapters / totalChapters) * 100)
+          : 0;
 
-      const timelineStatus = getTimelineStatus(assignment, progressPct);
+        const timelineStatus = getTimelineStatus(assignment, progressPct);
 
-      built.push({
-        key: `${assignment.learnerId}-${assignment.courseId}`,
-        assignmentId: assignment.id,
-        learnerId: assignment.learnerId,
-        learnerName: learner.name,
-        courseId: assignment.courseId,
-        courseTitle: course.title,
-        progressPct,
-        completedChapters,
-        totalChapters,
-        timelineStatus,
-        assignment,
-        course,
-        progress,
-      });
-    }
+        return {
+          key: `${assignment.learnerId}-${assignment.courseId}`,
+          assignmentId: assignment.id,
+          learnerId: assignment.learnerId,
+          learnerName: learner.name,
+          courseId: assignment.courseId,
+          courseTitle: course.title,
+          progressPct,
+          completedChapters,
+          totalChapters,
+          timelineStatus,
+          assignment,
+          course,
+          progress,
+        };
+      } catch { return null; }
+    });
 
-    setRows(built);
+    setRows((await Promise.all(rowPromises)).filter(Boolean));
     setLoading(false);
   }
 

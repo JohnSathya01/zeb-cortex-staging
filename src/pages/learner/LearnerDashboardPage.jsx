@@ -29,26 +29,30 @@ export default function LearnerDashboardPage() {
     try {
       const assignments = await getAssignments({ learnerId: user.uid });
       const cards = [];
-      for (const assignment of assignments) {
+      const cardPromises = assignments.map(async (assignment) => {
         try {
           const course = await getCourseById(assignment.courseId);
-          if (!course) continue;
+          if (!course) return null;
           const progress = await getProgress(user.uid, assignment.courseId);
           const totalChapters = course.chapters.length;
           const completedCount = progress.completedChapterIds.length;
           const progressPct = totalChapters > 0
             ? Math.round((completedCount / totalChapters) * 100)
             : 0;
-          // Calculate points eagerly (email only on status change)
-          const pts = await calculateCoursePoints(
-            user.uid, assignment.courseId, totalChapters, assignment.id, true
-          );
-          cards.push({ assignment, course, progressPct, completedCount, totalChapters, points: pts });
-        } catch {
-          // skip this card
-        }
+          return { assignment, course, progressPct, completedCount, totalChapters, points: null };
+        } catch { return null; }
+      });
+      const built = (await Promise.all(cardPromises)).filter(Boolean);
+      setCourseCards(built);
+
+      // Load points in background
+      for (const card of built) {
+        calculateCoursePoints(user.uid, card.assignment.courseId, card.totalChapters, card.assignment.id, true)
+          .then((pts) => {
+            if (pts) setCourseCards(prev => prev.map(c => c.assignment.id === card.assignment.id ? { ...c, points: pts } : c));
+          })
+          .catch(() => {});
       }
-      setCourseCards(cards);
     } catch {
       // silently handle
     } finally {

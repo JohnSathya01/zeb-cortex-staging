@@ -274,37 +274,39 @@ export default function ReviewingPage() {
       const userMap = Object.fromEntries(users.map((u) => [u.id || u.uid, u]));
       const courseMap = Object.fromEntries(courses.map((c) => [c.id, c]));
 
-      const built = [];
-      for (const assignment of myReviewing) {
+      // Build rows in parallel (progress + basic data)
+      const rowPromises = myReviewing.map(async (assignment) => {
         try {
           const learner = userMap[assignment.learnerId];
           const course = courseMap[assignment.courseId];
-          if (!learner || !course) continue;
+          if (!learner || !course) return null;
 
           const progress = await getProgressAsReviewer(assignment.learnerId, assignment.courseId);
           const totalChapters = course.chapters?.length ?? 0;
           const completedChapters = progress.completedChapterIds.length;
           const progressPct = totalChapters > 0 ? Math.round((completedChapters / totalChapters) * 100) : 0;
 
-          let pts = null;
-          try { pts = await calculateCoursePoints(assignment.learnerId, assignment.courseId, totalChapters, assignment.id, false); } catch { /* ignore */ }
-
-          built.push({
+          return {
             key: `${assignment.learnerId}-${assignment.courseId}`,
-            assignment,
-            learnerName: learner.name,
-            courseTitle: course.title,
-            progressPct,
-            completedChapters,
-            totalChapters,
-            status: assignment.status,
-            course,
-            progress,
-            pts,
-          });
-        } catch { /* skip */ }
+            assignment, learnerName: learner.name, courseTitle: course.title,
+            progressPct, completedChapters, totalChapters,
+            status: assignment.status, course, progress, pts: null,
+          };
+        } catch { return null; }
+      });
+      const results = (await Promise.all(rowPromises)).filter(Boolean);
+      setRows(results);
+      setLoading(false);
+
+      // Load points in background (non-blocking)
+      for (const row of results) {
+        calculateCoursePoints(row.assignment.learnerId, row.assignment.courseId, row.totalChapters, row.assignment.id, false)
+          .then((pts) => {
+            if (pts) setRows(prev => prev.map(r => r.key === row.key ? { ...r, pts } : r));
+          })
+          .catch(() => {});
       }
-      setRows(built);
+      return;
     } catch { /* handle */ }
     finally { setLoading(false); }
   }
