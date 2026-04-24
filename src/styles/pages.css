@@ -1447,10 +1447,12 @@
 .pts-badge {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
+  padding: 3px 10px;
   border-radius: 99px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .pts-on-track  { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
 .pts-at-risk   { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
@@ -1459,14 +1461,14 @@
 .course-card-points {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   margin-top: 10px;
-  padding-top: 10px;
+  padding: 10px 0 0;
   border-top: 1px solid #f0eee8;
   cursor: pointer;
 }
-.pts-sla-label  { font-size: 11px; color: var(--gray-500); flex: 1; }
-.pts-view-link  { font-size: 11px; color: #7c3aed; font-weight: 600; }
+.pts-sla-label  { font-size: 12px; color: var(--gray-500); flex: 1; }
+.pts-view-link  { font-size: 12px; color: #7c3aed; font-weight: 600; white-space: nowrap; margin-left: auto; }
 .course-card-points:hover .pts-view-link { text-decoration: underline; }
 
 /* Alert banner */
@@ -1652,8 +1654,8 @@
 .pts-risk-table-wrap { overflow-x: auto; }
 
 /* ===== course-card-points variants ===== */
-.course-card-points--risk  { border-top-color: #fde68a; background: #fffbeb; }
-.course-card-points--critical { border-top-color: #fecaca; background: #fef2f2; }
+.course-card-points--risk  { border-top-color: #fde68a; background: #fffbeb; margin: 10px -16px -16px; padding: 10px 16px; border-radius: 0 0 12px 12px; border-top: 1px solid #fde68a; }
+.course-card-points--critical { border-top-color: #fecaca; background: #fef2f2; margin: 10px -16px -16px; padding: 10px 16px; border-radius: 0 0 12px 12px; border-top: 1px solid #fecaca; }
 
 /* ===== MyPointsPage ===== */
 .mypts-summary {
