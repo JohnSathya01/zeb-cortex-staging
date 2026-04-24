@@ -236,18 +236,27 @@ export default function CoursePointsPage() {
               )}
             </ScoreCard>
 
-            <ScoreCard label="Reviewer Interaction" score={points.reviewer ?? 0} maxScore={30} minScore={0}>
-              <div className="pts-detail-row">
-                <span>Messages sent</span><strong>{points.reviewerDetail?.learnerMessages ?? 0}</strong>
-              </div>
-              <div className="pts-detail-row">
-                <span>Target</span><strong>5+ messages = 30 pts</strong>
-              </div>
-              {(points.reviewerDetail?.learnerMessages ?? 0) < 5 && (
-                <p className="pts-tip">Chat with your reviewer to earn up to 30 points.</p>
-              )}
-              {(points.reviewerDetail?.learnerMessages ?? 0) >= 5 && (
-                <p className="pts-tip pts-tip--ok">Great engagement with your reviewer.</p>
+            <ScoreCard label="Reviewer Feedback" score={points.reviewer ?? 0} maxScore={30} minScore={0}>
+              {points.reviewerDetail?.source && points.reviewerDetail.source !== 'none' ? (
+                <>
+                  <div className="pts-detail-row">
+                    <span>Attitude</span><strong>{points.reviewerDetail.attitude ?? 0}/10</strong>
+                  </div>
+                  <div className="pts-detail-row">
+                    <span>Communication</span><strong>{points.reviewerDetail.communication ?? 0}/10</strong>
+                  </div>
+                  <div className="pts-detail-row">
+                    <span>Business</span><strong>{points.reviewerDetail.business ?? 0}/10</strong>
+                  </div>
+                  <div className="pts-detail-row">
+                    <span>Technology</span><strong>{points.reviewerDetail.technology ?? 0}/10</strong>
+                  </div>
+                  <div className="pts-detail-row">
+                    <span>Source</span><strong>{points.reviewerDetail.source === 'final' ? 'Final Review' : 'Weekly Review'}</strong>
+                  </div>
+                </>
+              ) : (
+                <p className="pts-tip">No reviewer feedback submitted yet. Your reviewer will rate you on 4 aspects.</p>
               )}
             </ScoreCard>
           </div>
@@ -258,7 +267,7 @@ export default function CoursePointsPage() {
             <div className="pts-explainer-grid">
               <div><strong>Timeline (max 40)</strong><p>Earn up to 40 pts for being on or ahead of schedule. Points go negative (down to -20) if you fall behind.</p></div>
               <div><strong>AI Engagement (max 30)</strong><p>Earn up to 30 pts for using AI review on your exercises. Low usage (-10) if you skip AI review.</p></div>
-              <div><strong>Reviewer Interaction (max 30)</strong><p>Earn up to 30 pts for chatting with your reviewer. 5+ messages earns full points.</p></div>
+              <div><strong>Reviewer Feedback (max 30)</strong><p>Reviewer rates Attitude, Communication, Business, Technology (0-10 each). Average x3 = up to 30 pts.</p></div>
               <div><strong>SLA (minimum 80)</strong><p>You must maintain at least 80 points. Below 80 is At Risk; below 60 is Critical.</p></div>
             </div>
           </div>

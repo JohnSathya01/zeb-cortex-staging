@@ -36,6 +36,32 @@ export const sendReviewerNewAssignmentEmail = ({ toEmail, reviewerName, learnerN
 export const sendChatMessageEmail = ({ toEmail, toName, fromName, messagePreview, from }) =>
   send('chat_message', { toEmail, toName, fromName, messagePreview, fromEmail: from?.email, fromName: from?.name });
 
+// Escalation — reviewer escalates a learner to leadership
+export const sendEscalationEmail = async ({ learnerId, courseId, reviewerEmail, reviewerName, note }) => {
+  if (!WORKER_URL) throw new Error('VITE_MAILER_URL not configured');
+  const res = await fetch(`${WORKER_URL}/email/escalate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ learnerId, courseId, reviewerEmail, reviewerName, note }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+};
+
+// Course completed — notify reviewer for final feedback
+export const sendCourseCompletedEmail = async ({ learnerId, courseId, reviewerId }) => {
+  if (!WORKER_URL) throw new Error('VITE_MAILER_URL not configured');
+  const res = await fetch(`${WORKER_URL}/email/course-completed`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ learnerId, courseId, reviewerId }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+};
+
 // Risk alert — triggered by reviewer for at-risk learners
 export const sendRiskAlertEmail = async ({ userId, courseId, from }) => {
   if (!WORKER_URL) throw new Error('VITE_MAILER_URL not configured');

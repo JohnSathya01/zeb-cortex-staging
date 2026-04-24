@@ -230,6 +230,104 @@ export default {
       }
     }
 
+    // ── AI Feedback Scores ──────────────────────────────────────────────────────
+    if (url.pathname === '/ai/feedback-scores') {
+      let body;
+      try { body = await request.json(); } catch { return corsResponse(new Response('Invalid JSON', { status: 400 }), corsOrigin); }
+      const { assignmentId, learnerId, courseId } = body;
+      if (!learnerId || !courseId) return corsResponse(Response.json({ ok: false, error: 'Missing learnerId or courseId' }, { status: 400 }), corsOrigin);
+      try {
+        const scores = await suggestFeedbackScores({ assignmentId, learnerId, courseId }, env);
+        return corsResponse(Response.json({ ok: true, scores }), corsOrigin);
+      } catch (err) {
+        console.error('ai/feedback-scores error:', err.message);
+        return corsResponse(Response.json({ ok: false, error: err.message }, { status: 502 }), corsOrigin);
+      }
+    }
+
+    // ── Escalation Email ──────────────────────────────────────────────────────
+    if (url.pathname === '/email/escalate') {
+      let body;
+      try { body = await request.json(); } catch { return corsResponse(new Response('Invalid JSON', { status: 400 }), corsOrigin); }
+      const { learnerId, courseId, reviewerEmail, reviewerName, note } = body;
+      if (!learnerId || !courseId) return corsResponse(Response.json({ ok: false, error: 'Missing learnerId or courseId' }, { status: 400 }), corsOrigin);
+      try {
+        const token = await getGoogleAccessToken(env);
+        const pid = env.FIREBASE_PROJECT_ID;
+        const dbUrl = (path) => `https://${pid}-default-rtdb.firebaseio.com/${path}.json?access_token=${encodeURIComponent(token)}`;
+        const rd = async (path) => { const res = await fetch(dbUrl(path)); const d = await res.json(); if (d && typeof d === 'object' && d.error) throw new Error(d.error); return d; };
+
+        const [learner, pts] = await Promise.all([rd(`users/${learnerId}`), rd(`coursePoints/${learnerId}/${courseId}`)]);
+        const learnerName = learner?.name || learnerId;
+        const total = pts?.total ?? 0;
+        const status = pts?.status || 'unknown';
+        const statusLabel = { on_track: 'On Track', at_risk: 'At Risk', critical: 'Critical' }[status] || status;
+        const statusColor = { on_track: '#22c55e', at_risk: '#f59e0b', critical: '#ef4444' }[status] || '#9ca3af';
+        const app = env.APP_URL || 'https://cortex-zeb.web.app';
+
+        const subject = `[Escalation] ${learnerName} - ${courseId} (${total} pts, ${statusLabel})`;
+        const html = layout(`
+          ${h1('Learner Escalation')}
+          ${p(`<strong style="color:#fff">${reviewerName || 'A reviewer'}</strong> has escalated <strong style="color:#fff">${learnerName}</strong> for course <strong style="color:#fff">${courseId}</strong>.`)}
+          <table width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0">
+            <tr><td style="background:#12151f;border-radius:10px;padding:16px;text-align:center;border-left:4px solid ${statusColor}">
+              <div style="font-size:40px;font-weight:800;color:${statusColor};line-height:1">${total}</div>
+              <div style="font-size:12px;font-weight:700;color:${statusColor};text-transform:uppercase;letter-spacing:1px;margin-top:4px">${statusLabel}</div>
+            </td></tr>
+          </table>
+          ${note ? box(`<strong style="color:#fff">Reviewer's Note:</strong><br/><br/>${note}`) : ''}
+          ${cta('View Learner Progress', `${app}/reviewer`)}
+        `);
+
+        const from = reviewerEmail ? `${reviewerName || reviewerEmail} <${reviewerEmail}>` : `${env.FROM_NAME} <${env.FROM_EMAIL}>`;
+        const to = 'john.sathya@zeb.co, Sivasaran.Sekaran@zeb.co';
+        const ccList = [];
+        if (reviewerEmail) ccList.push(reviewerEmail);
+        const cc = ccList.length > 0 ? ccList.join(', ') : null;
+        const messageId = await sendSES({ from, to, cc, subject, html }, env);
+        return corsResponse(Response.json({ ok: true, messageId }), corsOrigin);
+      } catch (err) {
+        console.error('escalate error:', err.message);
+        return corsResponse(Response.json({ ok: false, error: err.message }, { status: 502 }), corsOrigin);
+      }
+    }
+
+    // ── Course Completed Email ─────────────────────────────────────────────────
+    if (url.pathname === '/email/course-completed') {
+      let body;
+      try { body = await request.json(); } catch { return corsResponse(new Response('Invalid JSON', { status: 400 }), corsOrigin); }
+      const { learnerId, courseId, reviewerId } = body;
+      if (!learnerId || !courseId || !reviewerId) return corsResponse(Response.json({ ok: false, error: 'Missing fields' }, { status: 400 }), corsOrigin);
+      try {
+        const token = await getGoogleAccessToken(env);
+        const pid = env.FIREBASE_PROJECT_ID;
+        const dbUrl = (path) => `https://${pid}-default-rtdb.firebaseio.com/${path}.json?access_token=${encodeURIComponent(token)}`;
+        const rd = async (path) => { const res = await fetch(dbUrl(path)); const d = await res.json(); if (d && typeof d === 'object' && d.error) throw new Error(d.error); return d; };
+
+        const [learner, reviewer] = await Promise.all([rd(`users/${learnerId}`), rd(`users/${reviewerId}`)]);
+        if (!reviewer?.email) return corsResponse(Response.json({ ok: false, error: 'Reviewer has no email' }, { status: 400 }), corsOrigin);
+
+        const learnerName = learner?.name || learnerId;
+        const app = env.APP_URL || 'https://cortex-zeb.web.app';
+        const subject = `Cortex: ${learnerName} completed ${courseId} - Final feedback needed`;
+        const html = layout(`
+          ${h1('Course Completed')}
+          ${p(`Hi ${reviewer.name || 'there'}, <strong style="color:#fff">${learnerName}</strong> has completed all chapters in <strong style="color:#fff">${courseId}</strong>.`)}
+          ${box(`Please schedule a meeting with ${learnerName} and submit your <strong style="color:#c4e04e">final feedback</strong> on the four aspects: Attitude, Communication, Business, and Technology.`)}
+          ${cta('Submit Final Feedback', `${app}/reviewer`)}
+        `);
+
+        const ccList = [];
+        if (env.CC_EMAIL && reviewer.email.toLowerCase() !== env.CC_EMAIL.toLowerCase()) ccList.push(env.CC_EMAIL);
+        const cc = ccList.length > 0 ? ccList.join(', ') : null;
+        const messageId = await sendSES({ from: `${env.FROM_NAME} <${env.FROM_EMAIL}>`, to: reviewer.email, cc, subject, html }, env);
+        return corsResponse(Response.json({ ok: true, messageId }), corsOrigin);
+      } catch (err) {
+        console.error('course-completed error:', err.message);
+        return corsResponse(Response.json({ ok: false, error: err.message }, { status: 502 }), corsOrigin);
+      }
+    }
+
     // ── Risk Alert Email ───────────────────────────────────────────────────────
     if (url.pathname === '/email/risk-alert') {
       let body;
@@ -747,16 +845,25 @@ async function calcCoursePoints({ userId, courseId, totalChapters, assignmentId,
     else aiScore = -10;
   }
 
-  // 3. Reviewer interaction score (0 to +30)
+  // 3. Reviewer feedback score (0 to +30)
   let reviewerScore = 0;
-  let reviewerDetail = { learnerMessages: 0 };
+  let reviewerDetail = { attitude: 0, communication: 0, business: 0, technology: 0, source: 'none' };
   if (asgId) {
-    const chats = await r(`chats/${asgId}`);
-    const learnerMsgCount = Object.values(chats || {}).filter(m => m.senderId === userId).length;
-    reviewerDetail.learnerMessages = learnerMsgCount;
-    if (learnerMsgCount >= 5) reviewerScore = 30;
-    else if (learnerMsgCount >= 3) reviewerScore = 20;
-    else if (learnerMsgCount >= 1) reviewerScore = 10;
+    const feedbackData = await r(`reviewerFeedback/${asgId}`);
+    let feedback = null;
+    if (feedbackData?.final) {
+      feedback = feedbackData.final;
+      reviewerDetail.source = 'final';
+    } else if (feedbackData?.weekly) {
+      const weeks = Object.entries(feedbackData.weekly);
+      weeks.sort((a, b) => b[0].localeCompare(a[0]));
+      if (weeks.length > 0) { feedback = weeks[0][1]; reviewerDetail.source = 'weekly'; }
+    }
+    if (feedback) {
+      const { attitude = 0, communication = 0, business = 0, technology = 0 } = feedback;
+      reviewerDetail = { attitude, communication, business, technology, source: reviewerDetail.source };
+      reviewerScore = Math.round(((attitude + communication + business + technology) / 4) * 3);
+    }
   }
 
   const totalScore = timelineScore + aiScore + reviewerScore;
@@ -839,7 +946,7 @@ function buildPointsAlertEmail({ toName, courseName, points, prevPoints, status,
     ${box(`<table width="100%" cellpadding="0" cellspacing="0">
       ${scoreRow('Timeline Adherence', timeline, '')}
       ${scoreRow('AI Engagement', ai, '')}
-      ${scoreRow('Reviewer Interaction', reviewer, '')}
+      ${scoreRow('Reviewer Feedback', reviewer, '')}
       <tr><td colspan="2" style="border-top:1px solid #2a2d3e;padding-top:8px;margin-top:8px"></td></tr>
       <tr><td style="font-size:14px;font-weight:700;color:#e2e8f0;padding-top:4px">Total Score</td><td style="text-align:right;font-size:14px;font-weight:800;color:${statusColor};padding-top:4px">${points} / 100</td></tr>
     </table>`)}
@@ -848,6 +955,75 @@ function buildPointsAlertEmail({ toName, courseName, points, prevPoints, status,
   `);
 
   return { subject, html };
+}
+
+// ─── AI Feedback Scoring ──────────────────────────────────────────────────────
+
+async function suggestFeedbackScores({ assignmentId, learnerId, courseId }, env) {
+  const token = await getGoogleAccessToken(env);
+  const pid = env.FIREBASE_PROJECT_ID;
+  const dbUrl = (path) => `https://${pid}-default-rtdb.firebaseio.com/${path}.json?access_token=${encodeURIComponent(token)}`;
+  const r = async (path) => { const res = await fetch(dbUrl(path)); const d = await res.json(); if (d && typeof d === 'object' && d.error) throw new Error(d.error); return d; };
+
+  const [progress, pts, assignment] = await Promise.all([
+    r(`progress/${learnerId}/${courseId}`),
+    r(`coursePoints/${learnerId}/${courseId}`),
+    assignmentId ? r(`assignments/${assignmentId}`) : Promise.resolve(null),
+  ]);
+
+  const completedCount = (progress?.completedChapterIds || []).length;
+  const exerciseSubs = Object.values(progress?.exerciseSubmissions || {});
+  const aiEngaged = exerciseSubs.filter(s => s.aiReview && String(s.aiReview).trim().length > 10).length;
+  const chatMsgs = assignmentId ? await r(`chats/${assignmentId}`) : null;
+  const learnerMsgs = Object.values(chatMsgs || {}).filter(m => m.senderId === learnerId).length;
+
+  const context = `Learner progress summary:
+- Chapters completed: ${completedCount}
+- Exercises submitted: ${exerciseSubs.length}, AI-reviewed: ${aiEngaged}
+- Chat messages sent to reviewer: ${learnerMsgs}
+- Timeline score: ${pts?.timeline ?? 0}/40, AI score: ${pts?.ai ?? 0}/30
+- Current total: ${pts?.total ?? 0}/100, Status: ${pts?.status || 'unknown'}
+- Assignment status: ${assignment?.status || 'unknown'}`;
+
+  const system = `You are an AI scoring assistant for the Cortex learning platform. Based on a learner's progress data, suggest scores (integers 0-10) for four aspects:
+- Attitude: Consistency, timeliness, proactive engagement
+- Communication: Interaction quality with reviewer, responsiveness
+- Business: Understanding demonstrated in assessments and exercises
+- Technology: AI tool engagement, technical exercise quality
+
+Respond ONLY with a JSON object like: {"attitude":7,"communication":6,"business":8,"technology":7}
+No explanation, no markdown, just the JSON object.`;
+
+  try {
+    const result = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+      max_tokens: 100,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: context },
+      ],
+    });
+    const text = (result.response || '').trim();
+    const match = text.match(/\{[^}]+\}/);
+    if (match) {
+      const parsed = JSON.parse(match[0]);
+      return {
+        attitude: Math.min(10, Math.max(0, Math.round(parsed.attitude || 5))),
+        communication: Math.min(10, Math.max(0, Math.round(parsed.communication || 5))),
+        business: Math.min(10, Math.max(0, Math.round(parsed.business || 5))),
+        technology: Math.min(10, Math.max(0, Math.round(parsed.technology || 5))),
+      };
+    }
+  } catch (e) { console.error('AI feedback scoring error:', e.message); }
+  return { attitude: 5, communication: 5, business: 5, technology: 5 };
+}
+
+function getWeekId(date = new Date()) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
+  const yearStart = new Date(d.getFullYear(), 0, 4);
+  const weekNo = Math.round(((d - yearStart) / 86400000 + 1) / 7);
+  return `${d.getFullYear()}-W${String(weekNo).padStart(2, '0')}`;
 }
 
 // ─── Daily Notifications (Cron) ───────────────────────────────────────────────
@@ -951,6 +1127,48 @@ async function runDailyNotifications(env) {
     }
   }
 
+  // Friday: send weekly feedback reminders to reviewers
+  const isFriday = new Date().getUTCDay() === 5;
+  if (isFriday) {
+    const weekId = getWeekId();
+    for (const [reviewerId, learners] of Object.entries(reviewerLearners)) {
+      const reviewer = userMap[reviewerId];
+      if (!reviewer) continue;
+      const needsFeedback = [];
+      for (const l of learners) {
+        const asgEntry = Object.entries(allAssignments || {}).find(([, a]) => a.learnerId === l.learnerId && a.courseId === l.courseId);
+        if (!asgEntry) continue;
+        const existing = await r(`reviewerFeedback/${asgEntry[0]}/weekly/${weekId}`);
+        if (!existing) needsFeedback.push({ ...l, assignmentId: asgEntry[0] });
+      }
+      if (needsFeedback.length > 0) {
+        await pushTo(`notifications/${reviewerId}`, {
+          type: 'weekly_feedback_reminder',
+          message: `Weekly feedback due: ${needsFeedback.length} learner(s) need your feedback today.`,
+          read: false, createdAt: new Date().toISOString(),
+          metadata: { weekId, count: needsFeedback.length },
+        });
+        if (reviewer.email) {
+          try {
+            const subject = `Cortex: Weekly Feedback Reminder - ${needsFeedback.length} learner(s)`;
+            const rows = needsFeedback.map(l => `<tr><td style="padding:6px 12px;color:#e2e8f0;font-size:13px;border-bottom:1px solid #2a2d3e">${l.learnerName}</td><td style="padding:6px 12px;color:#94a3b8;font-size:13px;border-bottom:1px solid #2a2d3e">${l.courseName}</td></tr>`).join('');
+            const html = layout(`
+              ${h1('Weekly Feedback Reminder')}
+              ${p(`Hi ${reviewer.name || 'there'}, please submit your weekly feedback for the following learners today.`)}
+              <table width="100%" cellpadding="0" cellspacing="0" style="background:#12151f;border-radius:8px;overflow:hidden;margin:16px 0">
+                <thead><tr><th style="padding:8px 12px;color:#4a5068;font-size:11px;text-transform:uppercase;text-align:left;border-bottom:1px solid #2a2d3e">Learner</th><th style="padding:8px 12px;color:#4a5068;font-size:11px;text-transform:uppercase;text-align:left;border-bottom:1px solid #2a2d3e">Course</th></tr></thead>
+                <tbody>${rows}</tbody>
+              </table>
+              ${cta('Open Learner Progress', `${(env.APP_URL || 'https://cortex-zeb.web.app')}/reviewer`)}
+            `);
+            const cc = reviewer.email.toLowerCase() === env.CC_EMAIL.toLowerCase() ? null : env.CC_EMAIL;
+            await sendSES({ from: `${env.FROM_NAME} <${env.FROM_EMAIL}>`, to: reviewer.email, cc, subject, html }, env);
+          } catch (e) { console.error('Feedback reminder email error:', e.message); }
+        }
+      }
+    }
+  }
+
   console.log('Daily notifications complete.');
 }
 
@@ -973,7 +1191,7 @@ function buildDailyLearnerEmail({ toName, courseName, courseId, total, status, s
     ${box(`<table width="100%" cellpadding="0" cellspacing="0">
       ${scoreRow('Timeline Adherence', timeline)}
       ${scoreRow('AI Engagement', ai)}
-      ${scoreRow('Reviewer Interaction', reviewer)}
+      ${scoreRow('Reviewer Feedback', reviewer)}
     </table>`)}
     ${status !== 'on_track' ? p(`<span style="color:#f59e0b">You need <strong style="color:#fff">${Math.max(0, 80 - total)} more points</strong> to reach the 80-point SLA.</span>`) : p(`<span style="color:#22c55e">You are above the SLA. Keep up the good work.</span>`)}
     ${cta('View My Points', `${app}/learner/points/${courseId}`)}

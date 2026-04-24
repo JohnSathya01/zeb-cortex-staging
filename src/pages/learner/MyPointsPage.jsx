@@ -147,7 +147,7 @@ export default function MyPointsPage() {
                       <span className="mypts-breakdown-sep">|</span>
                       <span title="AI Engagement">AI {pts.ai}</span>
                       <span className="mypts-breakdown-sep">|</span>
-                      <span title="Reviewer">Reviewer {pts.reviewer}</span>
+                      <span title="Reviewer Feedback">Feedback {pts.reviewer}</span>
                     </div>
                   </div>
                   <div className="mypts-card-arrow">&rsaquo;</div>
@@ -161,7 +161,7 @@ export default function MyPointsPage() {
             <div className="pts-explainer-grid">
               <div><strong>Timeline (max 40)</strong><p>On/ahead of schedule = up to +40. Behind schedule = up to -20.</p></div>
               <div><strong>AI Engagement (max 30)</strong><p>Use AI review on exercises for up to +30. Ignoring AI = -10 pts.</p></div>
-              <div><strong>Reviewer Chat (max 30)</strong><p>Send 5+ messages to your reviewer for full 30 pts.</p></div>
+              <div><strong>Reviewer Feedback (max 30)</strong><p>Reviewer rates Attitude, Communication, Business, Technology (0-10 each). Average x3 = up to 30 pts.</p></div>
               <div><strong>SLA = 80 pts</strong><p>Minimum score required. Below 80 is At Risk, below 60 is Critical.</p></div>
             </div>
           </div>

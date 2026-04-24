@@ -494,6 +494,21 @@ export function DataProvider({ children }) {
             if (a.learnerId === learnerId && a.courseId === courseId) {
               if (allDone) {
                 await update(ref(database, `assignments/${aId}`), { status: 'completed' });
+                // Notify reviewer for final feedback
+                if (a.reviewerId) {
+                  const learnerSnap2 = await get(ref(database, `users/${learnerId}`));
+                  const lName = learnerSnap2.exists() ? learnerSnap2.val().name : 'A learner';
+                  const cName = course ? course.title : courseId;
+                  await sendNotification(a.reviewerId, {
+                    type: 'course_completed_final_feedback',
+                    message: `${lName} completed ${cName}. Please schedule a meeting and submit final feedback.`,
+                    metadata: { learnerId, courseId, assignmentId: aId },
+                  });
+                  try {
+                    const { sendCourseCompletedEmail } = await import('../services/emailService.js');
+                    await sendCourseCompletedEmail({ learnerId, courseId, reviewerId: a.reviewerId });
+                  } catch { /* email best-effort */ }
+                }
               } else if (a.status === 'not_started') {
                 await update(ref(database, `assignments/${aId}`), { status: 'in_progress' });
               }
@@ -627,6 +642,87 @@ export function DataProvider({ children }) {
       throw error;
     }
   }, [handlePermissionDenied]);
+
+  // ── Reviewer Feedback ──
+
+  const getReviewerFeedback = useCallback(async (assignmentId) => {
+    try {
+      const snapshot = await get(ref(database, `reviewerFeedback/${assignmentId}`));
+      if (!snapshot.exists()) return { weekly: {}, final: null };
+      const data = snapshot.val();
+      return { weekly: data.weekly || {}, final: data.final || null };
+    } catch (error) {
+      handlePermissionDenied(error);
+      throw error;
+    }
+  }, [handlePermissionDenied]);
+
+  const submitWeeklyFeedback = useCallback(async (assignmentId, weekId, scores) => {
+    try {
+      const feedbackRef = ref(database, `reviewerFeedback/${assignmentId}/weekly/${weekId}`);
+      const existing = await get(feedbackRef);
+      if (existing.exists() && existing.val().overridden) {
+        throw { error: 'Feedback has already been overridden and is now locked.' };
+      }
+      const isOverride = existing.exists();
+      const record = {
+        attitude: scores.attitude,
+        communication: scores.communication,
+        business: scores.business,
+        technology: scores.technology,
+        submittedAt: new Date().toISOString(),
+        overridden: isOverride,
+        aiSuggested: scores.aiSuggested || null,
+      };
+      await set(feedbackRef, record);
+      return record;
+    } catch (error) {
+      if (error?.error) throw error;
+      handlePermissionDenied(error);
+      throw error;
+    }
+  }, [handlePermissionDenied]);
+
+  const submitFinalFeedback = useCallback(async (assignmentId, scores) => {
+    try {
+      const feedbackRef = ref(database, `reviewerFeedback/${assignmentId}/final`);
+      const existing = await get(feedbackRef);
+      if (existing.exists() && existing.val().overridden) {
+        throw { error: 'Final feedback has already been overridden and is now locked.' };
+      }
+      const isOverride = existing.exists();
+      const record = {
+        attitude: scores.attitude,
+        communication: scores.communication,
+        business: scores.business,
+        technology: scores.technology,
+        submittedAt: new Date().toISOString(),
+        overridden: isOverride,
+        aiSuggested: scores.aiSuggested || null,
+      };
+      await set(feedbackRef, record);
+      return record;
+    } catch (error) {
+      if (error?.error) throw error;
+      handlePermissionDenied(error);
+      throw error;
+    }
+  }, [handlePermissionDenied]);
+
+  const getAIFeedbackScores = useCallback(async (assignmentId, learnerId, courseId) => {
+    try {
+      const res = await fetch(`${WORKER_URL}/ai/feedback-scores`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignmentId, learnerId, courseId }),
+      });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error || 'Failed');
+      return json.scores;
+    } catch {
+      return { attitude: 5, communication: 5, business: 5, technology: 5 };
+    }
+  }, []);
 
   // ── Course Points ──
 
@@ -1174,6 +1270,11 @@ export function DataProvider({ children }) {
     calculateCoursePoints,
     getCoursePoints,
     getAtRiskLearners,
+    // Reviewer Feedback
+    getReviewerFeedback,
+    submitWeeklyFeedback,
+    submitFinalFeedback,
+    getAIFeedbackScores,
     // Cohorts
     getCohorts,
     createCohort,
