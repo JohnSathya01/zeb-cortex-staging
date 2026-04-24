@@ -251,6 +251,7 @@ export default function ReviewingPage() {
   const [loading, setLoading] = useState(true);
   const [expandedKey, setExpandedKey] = useState(null);
   const [detailData, setDetailData] = useState(null);
+  const [feedbackHistory, setFeedbackHistory] = useState(null);
   const [answerViewer, setAnswerViewer] = useState(null);
   const [alertStatus, setAlertStatus] = useState({});
   const [feedbackModal, setFeedbackModal] = useState(null);
@@ -312,7 +313,7 @@ export default function ReviewingPage() {
   }
 
   async function toggleExpand(row) {
-    if (expandedKey === row.key) { setExpandedKey(null); setDetailData(null); return; }
+    if (expandedKey === row.key) { setExpandedKey(null); setDetailData(null); setFeedbackHistory(null); return; }
 
     const sorted = [...row.course.chapters].sort((a, b) => a.sequenceOrder - b.sequenceOrder);
     const chapters = sorted.map((ch) => {
@@ -333,6 +334,9 @@ export default function ReviewingPage() {
     });
     setExpandedKey(row.key);
     setDetailData(chapters);
+    setFeedbackHistory(null);
+    // Load feedback history in background
+    getReviewerFeedback(row.assignment.id).then(fb => setFeedbackHistory(fb)).catch(() => {});
   }
 
   async function handleSendRiskAlert(row) {
@@ -422,7 +426,60 @@ export default function ReviewingPage() {
                   <tr className="detail-row">
                     <td colSpan={6}>
                       <div className="detail-content">
-                        <h4>Chapter Details -- {row.learnerName}</h4>
+                        {/* Feedback History */}
+                        <h4 style={{ marginBottom: '12px' }}>Feedback History -- {row.learnerName}</h4>
+                        {!feedbackHistory ? (
+                          <p style={{ fontSize: '13px', color: '#9ca3af' }}>Loading feedback...</p>
+                        ) : (() => {
+                          const weeklyEntries = Object.entries(feedbackHistory.weekly || {}).sort((a, b) => b[0].localeCompare(a[0]));
+                          const hasFinal = !!feedbackHistory.final;
+                          const hasAny = weeklyEntries.length > 0 || hasFinal;
+                          if (!hasAny) return <p style={{ fontSize: '13px', color: '#9ca3af', marginBottom: '16px' }}>No feedback submitted yet.</p>;
+                          return (
+                            <div style={{ marginBottom: '20px' }}>
+                              <table className="detail-table" style={{ marginBottom: '8px' }}>
+                                <thead>
+                                  <tr>
+                                    <th>Type</th>
+                                    <th>Date</th>
+                                    <th>Attitude</th>
+                                    <th>Communication</th>
+                                    <th>Business</th>
+                                    <th>Technology</th>
+                                    <th>Total</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {hasFinal && (
+                                    <tr style={{ background: '#f0fdf4' }}>
+                                      <td><strong>Final</strong></td>
+                                      <td>{new Date(feedbackHistory.final.submittedAt).toLocaleDateString()}</td>
+                                      <td>{feedbackHistory.final.attitude}/10</td>
+                                      <td>{feedbackHistory.final.communication}/10</td>
+                                      <td>{feedbackHistory.final.business}/10</td>
+                                      <td>{feedbackHistory.final.technology}/10</td>
+                                      <td><strong>{Math.round(((feedbackHistory.final.attitude + feedbackHistory.final.communication + feedbackHistory.final.business + feedbackHistory.final.technology) / 4) * 3)}/30</strong></td>
+                                    </tr>
+                                  )}
+                                  {weeklyEntries.map(([weekId, fb]) => (
+                                    <tr key={weekId}>
+                                      <td>{weekId}</td>
+                                      <td>{new Date(fb.submittedAt).toLocaleDateString()}</td>
+                                      <td>{fb.attitude}/10</td>
+                                      <td>{fb.communication}/10</td>
+                                      <td>{fb.business}/10</td>
+                                      <td>{fb.technology}/10</td>
+                                      <td>{Math.round(((fb.attitude + fb.communication + fb.business + fb.technology) / 4) * 3)}/30</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          );
+                        })()}
+
+                        {/* Chapter Details */}
+                        <h4 style={{ marginBottom: '8px' }}>Chapter Details</h4>
                         <table className="detail-table">
                           <thead><tr><th>Chapter</th><th>Completed</th><th>Assessment</th><th>Exercises</th><th>Actions</th></tr></thead>
                           <tbody>
