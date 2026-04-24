@@ -38,7 +38,7 @@ function getWeekId() {
 
 function FeedbackModal({ row, mode, onClose, onSaved, getAIFeedbackScores, submitWeeklyFeedback, submitFinalFeedback, getReviewerFeedback }) {
   const weekId = getWeekId();
-  const [feedbackText, setFeedbackText] = useState('');
+  const [feedbackTexts, setFeedbackTexts] = useState({ attitude: '', communication: '', business: '', technology: '' });
   const [scores, setScores] = useState(null);
   const [aiScores, setAiScores] = useState(null);
   const [phase, setPhase] = useState('write'); // write -> review -> locked
@@ -64,9 +64,11 @@ function FeedbackModal({ row, mode, onClose, onSaved, getAIFeedbackScores, submi
   }
 
   async function handleAnalyze() {
-    if (!feedbackText.trim()) { setError('Please write your feedback first.'); return; }
+    const combined = Object.values(feedbackTexts).filter(t => t.trim()).join(' ');
+    if (!combined.trim()) { setError('Please write feedback in at least one area.'); return; }
     setAnalyzing(true);
     setError(null);
+    const feedbackText = `Attitude: ${feedbackTexts.attitude || 'N/A'}\nCommunication: ${feedbackTexts.communication || 'N/A'}\nBusiness: ${feedbackTexts.business || 'N/A'}\nTechnology: ${feedbackTexts.technology || 'N/A'}`;
     try {
       const ai = await getAIFeedbackScores(row.assignment.id, row.assignment.learnerId, row.assignment.courseId, feedbackText);
       setAiScores(ai);
@@ -82,7 +84,7 @@ function FeedbackModal({ row, mode, onClose, onSaved, getAIFeedbackScores, submi
     setSaving(true);
     setError(null);
     try {
-      const payload = { ...scores, aiSuggested: aiScores, feedbackText };
+      const payload = { ...scores, aiSuggested: aiScores, feedbackTexts };
       if (mode === 'final') {
         await submitFinalFeedback(row.assignment.id, payload);
       } else {
@@ -113,16 +115,26 @@ function FeedbackModal({ row, mode, onClose, onSaved, getAIFeedbackScores, submi
           <div style={{ padding: '24px', textAlign: 'center', color: '#6b7280' }}>Loading...</div>
         ) : phase === 'write' ? (
           <>
-            <p style={{ fontSize: '13px', color: 'var(--gray-500)', marginBottom: '12px' }}>
-              Write your feedback about this learner. AI will analyze it and assign scores for Attitude, Communication, Business, and Technology.
+            <p style={{ fontSize: '13px', color: 'var(--gray-500)', marginBottom: '16px' }}>
+              Write your feedback for each aspect. AI will analyze and assign scores.
             </p>
-            <textarea
-              value={feedbackText}
-              onChange={(e) => setFeedbackText(e.target.value)}
-              placeholder="Write your feedback about the learner's performance, engagement, communication, technical skills..."
-              rows={6}
-              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--gray-300)', fontSize: '14px', resize: 'vertical', fontFamily: 'inherit', lineHeight: '1.6' }}
-            />
+            {[
+              { key: 'attitude', label: 'Attitude', placeholder: 'Consistency, timeliness, willingness to learn...' },
+              { key: 'communication', label: 'Communication', placeholder: 'Interaction quality, responsiveness, clarity...' },
+              { key: 'business', label: 'Business', placeholder: 'Domain understanding, assessment performance...' },
+              { key: 'technology', label: 'Technology', placeholder: 'Technical skills, AI tool usage, exercise quality...' },
+            ].map(({ key, label, placeholder }) => (
+              <div key={key} style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--gray-700)', marginBottom: '4px' }}>{label}</label>
+                <textarea
+                  value={feedbackTexts[key]}
+                  onChange={(e) => setFeedbackTexts(prev => ({ ...prev, [key]: e.target.value }))}
+                  placeholder={placeholder}
+                  rows={2}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--gray-300)', fontSize: '13px', resize: 'vertical', fontFamily: 'inherit', lineHeight: '1.5' }}
+                />
+              </div>
+            ))}
             {error && <div style={{ color: '#dc2626', fontSize: '13px', marginTop: '8px' }}>{error}</div>}
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '16px' }}>
               <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
