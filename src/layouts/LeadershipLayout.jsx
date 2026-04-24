@@ -36,6 +36,13 @@ const navGroups = [
     ],
   },
   {
+    label: 'Reviewing',
+    items: [
+      { to: '/leadership/reviewing',    label: 'Learner Progress', Icon: IconChart },
+      { to: '/leadership/review-chats', label: 'Review Chats',     Icon: IconChat },
+    ],
+  },
+  {
     label: 'Communication',
     items: [
       { to: '/leadership/chats', label: 'Chats', Icon: IconChat },

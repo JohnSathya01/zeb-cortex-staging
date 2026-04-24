@@ -70,6 +70,8 @@ function AppRoutes() {
               <Route path="analytics" element={<AnalyticsDashboardPage />} />
               <Route path="cohorts" element={<CohortManagementPage />} />
               <Route path="audit" element={<AuditLogPage />} />
+              <Route path="reviewing" element={<ReviewingPage />} />
+              <Route path="review-chats" element={<ReviewChatsPage />} />
             </Route>
           </Route>
         </Route>
