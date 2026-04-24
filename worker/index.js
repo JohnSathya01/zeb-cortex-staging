@@ -329,6 +329,51 @@ export default {
       }
     }
 
+    // ── Feedback Submitted Email ─────────────────────────────────────────────
+    if (url.pathname === '/email/feedback-submitted') {
+      let body;
+      try { body = await request.json(); } catch { return corsResponse(new Response('Invalid JSON', { status: 400 }), corsOrigin); }
+      const { learnerId, courseId, assignmentId, type, scores } = body;
+      if (!learnerId || !courseId) return corsResponse(Response.json({ ok: false, error: 'Missing fields' }, { status: 400 }), corsOrigin);
+      try {
+        const token = await getGoogleAccessToken(env);
+        const pid = env.FIREBASE_PROJECT_ID;
+        const dbUrl = (path) => `https://${pid}-default-rtdb.firebaseio.com/${path}.json?access_token=${encodeURIComponent(token)}`;
+        const rd = async (path) => { const res = await fetch(dbUrl(path)); const d = await res.json(); if (d && typeof d === 'object' && d.error) throw new Error(d.error); return d; };
+
+        const [learner, assignment] = await Promise.all([rd(`users/${learnerId}`), assignmentId ? rd(`assignments/${assignmentId}`) : null]);
+        if (!learner?.email) return corsResponse(Response.json({ ok: false, error: 'Learner has no email' }, { status: 400 }), corsOrigin);
+
+        const reviewerName = assignment?.reviewerId ? ((await rd(`users/${assignment.reviewerId}`))?.name || 'Your reviewer') : 'Your reviewer';
+        const total = scores ? Math.round(((scores.attitude + scores.communication + scores.business + scores.technology) / 4) * 3) : 0;
+        const typeLabel = type === 'final' ? 'Final Course Review' : 'Weekly Review';
+        const app = env.APP_URL || 'https://cortex-zeb.web.app';
+
+        const subject = `Cortex: ${typeLabel} Feedback Received - ${courseId}`;
+        const html = layout(`
+          ${h1(`${typeLabel} Feedback`)}
+          ${p(`Hi ${learner.name || 'there'}, <strong style="color:#fff">${reviewerName}</strong> has submitted ${type === 'final' ? 'final' : 'weekly'} feedback for your course <strong style="color:#fff">${courseId}</strong>.`)}
+          ${box(`<table width="100%" cellpadding="0" cellspacing="0">
+            <tr><td style="padding:4px 0;color:#94a3b8;font-size:13px">Attitude</td><td style="text-align:right;font-weight:700;color:#e2e8f0;font-size:13px">${scores?.attitude ?? 0}/10</td></tr>
+            <tr><td style="padding:4px 0;color:#94a3b8;font-size:13px">Communication</td><td style="text-align:right;font-weight:700;color:#e2e8f0;font-size:13px">${scores?.communication ?? 0}/10</td></tr>
+            <tr><td style="padding:4px 0;color:#94a3b8;font-size:13px">Business</td><td style="text-align:right;font-weight:700;color:#e2e8f0;font-size:13px">${scores?.business ?? 0}/10</td></tr>
+            <tr><td style="padding:4px 0;color:#94a3b8;font-size:13px">Technology</td><td style="text-align:right;font-weight:700;color:#e2e8f0;font-size:13px">${scores?.technology ?? 0}/10</td></tr>
+            <tr><td colspan="2" style="border-top:1px solid #2a2d3e;padding-top:8px"></td></tr>
+            <tr><td style="font-weight:700;color:#e2e8f0;font-size:14px">Reviewer Score</td><td style="text-align:right;font-weight:800;color:#c4e04e;font-size:14px">${total}/30</td></tr>
+          </table>`)}
+          ${cta('View My Points', `${app}/learner/my-points`)}
+        `);
+
+        const ccList = await getLeadershipCcList(env, [learner.email]);
+        const cc = ccList.length > 0 ? ccList.join(', ') : null;
+        const messageId = await sendSES({ from: `${env.FROM_NAME} <${env.FROM_EMAIL}>`, to: learner.email, cc, subject, html }, env);
+        return corsResponse(Response.json({ ok: true, messageId }), corsOrigin);
+      } catch (err) {
+        console.error('feedback-submitted email error:', err.message);
+        return corsResponse(Response.json({ ok: false, error: err.message }, { status: 502 }), corsOrigin);
+      }
+    }
+
     // ── Risk Alert Email ───────────────────────────────────────────────────────
     if (url.pathname === '/email/risk-alert') {
       let body;

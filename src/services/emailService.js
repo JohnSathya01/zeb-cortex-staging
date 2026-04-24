@@ -36,6 +36,19 @@ export const sendReviewerNewAssignmentEmail = ({ toEmail, reviewerName, learnerN
 export const sendChatMessageEmail = ({ toEmail, toName, fromName, messagePreview, from }) =>
   send('chat_message', { toEmail, toName, fromName, messagePreview, fromEmail: from?.email, fromName: from?.name });
 
+// Feedback submitted — notify learner about reviewer feedback
+export const sendFeedbackNotificationEmail = async ({ learnerId, courseId, assignmentId, type, scores }) => {
+  if (!WORKER_URL) throw new Error('VITE_MAILER_URL not configured');
+  const res = await fetch(`${WORKER_URL}/email/feedback-submitted`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ learnerId, courseId, assignmentId, type, scores }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+};
+
 // Escalation — reviewer escalates a learner to leadership
 export const sendEscalationEmail = async ({ learnerId, courseId, reviewerEmail, reviewerName, note }) => {
   if (!WORKER_URL) throw new Error('VITE_MAILER_URL not configured');

@@ -90,6 +90,18 @@ function FeedbackModal({ row, mode, onClose, onSaved, getAIFeedbackScores, submi
       } else {
         await submitWeeklyFeedback(row.assignment.id, weekId, payload);
       }
+      // Send notification email to learner (best-effort)
+      try {
+        const { sendFeedbackNotificationEmail } = await import('../../services/emailService.js');
+        await sendFeedbackNotificationEmail({
+          learnerId: row.assignment.learnerId,
+          courseId: row.assignment.courseId,
+          assignmentId: row.assignment.id,
+          type: mode,
+          scores,
+          reviewerName: undefined, // worker will use from env
+        });
+      } catch { /* email best-effort */ }
       onSaved();
       onClose();
     } catch (err) {
@@ -287,11 +299,22 @@ export default function ReviewingPage() {
           const completedChapters = progress.completedChapterIds.length;
           const progressPct = totalChapters > 0 ? Math.round((completedChapters / totalChapters) * 100) : 0;
 
+          // Check last feedback date for cooldown
+          let lastFeedbackAt = null;
+          try {
+            const fb = await getReviewerFeedback(assignment.id);
+            const weeklyEntries = Object.values(fb.weekly || {});
+            if (fb.final?.submittedAt) lastFeedbackAt = fb.final.submittedAt;
+            for (const w of weeklyEntries) {
+              if (w.submittedAt && (!lastFeedbackAt || w.submittedAt > lastFeedbackAt)) lastFeedbackAt = w.submittedAt;
+            }
+          } catch { /* ignore */ }
+
           return {
             key: `${assignment.learnerId}-${assignment.courseId}`,
             assignment, learnerName: learner.name, courseTitle: course.title,
             progressPct, completedChapters, totalChapters,
-            status: assignment.status, course, progress, pts: null,
+            status: assignment.status, course, progress, pts: null, lastFeedbackAt,
           };
         } catch { return null; }
       });
@@ -393,13 +416,23 @@ export default function ReviewingPage() {
                   <td><PointsCell pts={row.pts} /></td>
                   <td onClick={(e) => e.stopPropagation()}>
                     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        style={{ fontSize: '12px', whiteSpace: 'nowrap' }}
-                        onClick={() => setFeedbackModal({ row, mode: row.status === 'completed' ? 'final' : 'weekly' })}
-                      >
-                        {row.status === 'completed' ? 'Final Feedback' : 'Give Feedback'}
-                      </button>
+                      {(() => {
+                        const isFinal = row.status === 'completed';
+                        const cooldownMs = 7 * 24 * 60 * 60 * 1000; // 1 week
+                        const onCooldown = !isFinal && row.lastFeedbackAt && (Date.now() - new Date(row.lastFeedbackAt).getTime()) < cooldownMs;
+                        const daysLeft = onCooldown ? Math.ceil((cooldownMs - (Date.now() - new Date(row.lastFeedbackAt).getTime())) / 86400000) : 0;
+                        return (
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            style={{ fontSize: '12px', whiteSpace: 'nowrap', opacity: onCooldown ? 0.5 : 1 }}
+                            disabled={onCooldown}
+                            title={onCooldown ? `Feedback submitted. You will be reminded and can submit again in ${daysLeft} day(s).` : ''}
+                            onClick={() => !onCooldown && setFeedbackModal({ row, mode: isFinal ? 'final' : 'weekly' })}
+                          >
+                            {onCooldown ? `Feedback Given` : isFinal ? 'Final Feedback' : 'Give Feedback'}
+                          </button>
+                        );
+                      })()}
                       {row.pts && (row.pts.status === 'at_risk' || row.pts.status === 'critical') && (
                         <>
                           <button
