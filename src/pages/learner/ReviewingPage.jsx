@@ -38,40 +38,51 @@ function getWeekId() {
 
 function FeedbackModal({ row, mode, onClose, onSaved, getAIFeedbackScores, submitWeeklyFeedback, submitFinalFeedback, getReviewerFeedback }) {
   const weekId = getWeekId();
-  const [scores, setScores] = useState({ attitude: 5, communication: 5, business: 5, technology: 5 });
+  const [feedbackText, setFeedbackText] = useState('');
+  const [scores, setScores] = useState(null);
   const [aiScores, setAiScores] = useState(null);
+  const [phase, setPhase] = useState('write'); // write -> review -> locked
   const [loading, setLoading] = useState(true);
+  const [analyzing, setAnalyzing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [locked, setLocked] = useState(false);
   const [error, setError] = useState(null);
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { checkExisting(); }, []);
 
-  async function loadData() {
+  async function checkExisting() {
     setLoading(true);
     try {
-      const [ai, existing] = await Promise.all([
-        getAIFeedbackScores(row.assignment.id, row.assignment.learnerId, row.assignment.courseId),
-        getReviewerFeedback(row.assignment.id),
-      ]);
-      setAiScores(ai);
-
+      const existing = await getReviewerFeedback(row.assignment.id);
       const fb = mode === 'final' ? existing.final : existing.weekly?.[weekId];
       if (fb) {
         setScores({ attitude: fb.attitude, communication: fb.communication, business: fb.business, technology: fb.technology });
-        if (fb.overridden) setLocked(true);
-      } else {
-        setScores(ai);
+        setAiScores(fb.aiSuggested || null);
+        setPhase(fb.overridden ? 'locked' : 'review');
       }
     } catch { /* use defaults */ }
     setLoading(false);
+  }
+
+  async function handleAnalyze() {
+    if (!feedbackText.trim()) { setError('Please write your feedback first.'); return; }
+    setAnalyzing(true);
+    setError(null);
+    try {
+      const ai = await getAIFeedbackScores(row.assignment.id, row.assignment.learnerId, row.assignment.courseId, feedbackText);
+      setAiScores(ai);
+      setScores({ ...ai });
+      setPhase('review');
+    } catch {
+      setError('Failed to analyze feedback. Please try again.');
+    }
+    setAnalyzing(false);
   }
 
   async function handleSave() {
     setSaving(true);
     setError(null);
     try {
-      const payload = { ...scores, aiSuggested: aiScores };
+      const payload = { ...scores, aiSuggested: aiScores, feedbackText };
       if (mode === 'final') {
         await submitFinalFeedback(row.assignment.id, payload);
       } else {
@@ -85,59 +96,83 @@ function FeedbackModal({ row, mode, onClose, onSaved, getAIFeedbackScores, submi
     setSaving(false);
   }
 
-  const total = Math.round(((scores.attitude + scores.communication + scores.business + scores.technology) / 4) * 3);
-
+  const total = scores ? Math.round(((scores.attitude + scores.communication + scores.business + scores.technology) / 4) * 3) : 0;
   const aspects = [
-    { key: 'attitude', label: 'Attitude', hint: 'Consistency, timeliness, proactive engagement' },
-    { key: 'communication', label: 'Communication', hint: 'Interaction quality, responsiveness' },
-    { key: 'business', label: 'Business', hint: 'Understanding in assessments and exercises' },
-    { key: 'technology', label: 'Technology', hint: 'AI tool usage, technical exercise quality' },
+    { key: 'attitude', label: 'Attitude' },
+    { key: 'communication', label: 'Communication' },
+    { key: 'business', label: 'Business' },
+    { key: 'technology', label: 'Technology' },
   ];
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
-        <div className="modal-header">
-          <h3>{mode === 'final' ? 'Final Feedback' : 'Weekly Feedback'} -- {row.learnerName}</h3>
-          <button className="modal-close" onClick={onClose}>&times;</button>
-        </div>
+    <div className="form-overlay" onClick={onClose}>
+      <div className="form-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px', maxHeight: '90vh', overflow: 'auto' }}>
+        <h2 style={{ marginBottom: '16px' }}>{mode === 'final' ? 'Final Feedback' : 'Weekly Feedback'} -- {row.learnerName}</h2>
+
         {loading ? (
-          <div style={{ padding: '24px', textAlign: 'center', color: '#6b7280' }}>Loading AI suggestions...</div>
+          <div style={{ padding: '24px', textAlign: 'center', color: '#6b7280' }}>Loading...</div>
+        ) : phase === 'write' ? (
+          <>
+            <p style={{ fontSize: '13px', color: 'var(--gray-500)', marginBottom: '12px' }}>
+              Write your feedback about this learner. AI will analyze it and assign scores for Attitude, Communication, Business, and Technology.
+            </p>
+            <textarea
+              value={feedbackText}
+              onChange={(e) => setFeedbackText(e.target.value)}
+              placeholder="Write your feedback about the learner's performance, engagement, communication, technical skills..."
+              rows={6}
+              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--gray-300)', fontSize: '14px', resize: 'vertical', fontFamily: 'inherit', lineHeight: '1.6' }}
+            />
+            {error && <div style={{ color: '#dc2626', fontSize: '13px', marginTop: '8px' }}>{error}</div>}
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '16px' }}>
+              <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleAnalyze} disabled={analyzing}>
+                {analyzing ? 'Analyzing...' : 'Analyze with AI'}
+              </button>
+            </div>
+          </>
         ) : (
-          <div style={{ padding: '16px 24px' }}>
-            {locked && (
+          <>
+            {phase === 'locked' && (
               <div style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px', color: '#92400e' }}>
-                Feedback has been overridden and is now locked.
+                Scores have been adjusted and are now locked.
               </div>
             )}
-            {aspects.map(({ key, label, hint }) => (
-              <div key={key} style={{ marginBottom: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--gray-800)' }}>{label}</label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {aiScores && <span style={{ fontSize: '11px', color: '#9ca3af' }}>AI: {aiScores[key]}</span>}
-                    <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--gray-900)', minWidth: '24px', textAlign: 'right' }}>{scores[key]}</span>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+              {aspects.map(({ key, label }) => (
+                <div key={key} style={{ background: 'var(--gray-50)', borderRadius: '8px', padding: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--gray-600)' }}>{label}</span>
+                    <span style={{ fontSize: '18px', fontWeight: 800, color: 'var(--gray-900)' }}>{scores[key]}</span>
+                  </div>
+                  <input
+                    type="range" min="0" max="10" value={scores[key]}
+                    disabled={phase === 'locked'}
+                    onChange={(e) => setScores(prev => ({ ...prev, [key]: parseInt(e.target.value) }))}
+                    style={{ width: '100%', accentColor: '#7c3aed' }}
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#9ca3af' }}>
+                    <span>0</span>
+                    {aiScores && <span>AI suggested: {aiScores[key]}</span>}
+                    <span>10</span>
                   </div>
                 </div>
-                <input
-                  type="range" min="0" max="10" value={scores[key]}
-                  disabled={locked}
-                  onChange={(e) => setScores(prev => ({ ...prev, [key]: parseInt(e.target.value) }))}
-                  style={{ width: '100%', accentColor: '#7c3aed' }}
-                />
-                <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>{hint}</div>
-              </div>
-            ))}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderTop: '1px solid var(--gray-200)', marginTop: '8px' }}>
-              <span style={{ fontSize: '13px', color: 'var(--gray-500)' }}>Reviewer Score</span>
-              <span style={{ fontSize: '20px', fontWeight: 800, color: total >= 20 ? '#22c55e' : total >= 10 ? '#f59e0b' : '#ef4444' }}>{total} <span style={{ fontSize: '12px', fontWeight: 400, color: '#9ca3af' }}>/ 30</span></span>
+              ))}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderTop: '1px solid var(--gray-200)' }}>
+              <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--gray-600)' }}>Reviewer Score</span>
+              <span style={{ fontSize: '24px', fontWeight: 800, color: total >= 20 ? '#22c55e' : total >= 10 ? '#f59e0b' : '#ef4444' }}>{total}<span style={{ fontSize: '13px', fontWeight: 400, color: '#9ca3af' }}> / 30</span></span>
             </div>
             {error && <div style={{ color: '#dc2626', fontSize: '13px', marginTop: '8px' }}>{error}</div>}
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '16px' }}>
               <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-              {!locked && <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Submit Feedback'}</button>}
+              {phase !== 'locked' && (
+                <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+                  {saving ? 'Saving...' : 'Submit Feedback'}
+                </button>
+              )}
             </div>
-          </div>
+          </>
         )}
       </div>
     </div>
@@ -165,34 +200,29 @@ function EscalateModal({ row, user, onClose }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px' }}>
-        <div className="modal-header">
-          <h3>Escalate -- {row.learnerName}</h3>
-          <button className="modal-close" onClick={onClose}>&times;</button>
-        </div>
-        <div style={{ padding: '16px 24px' }}>
-          <p style={{ fontSize: '13px', color: 'var(--gray-500)', marginBottom: '12px' }}>
-            This will send an escalation email to leadership (john.sathya@zeb.co and Sivasaran.Sekaran@zeb.co) with you in CC.
-          </p>
-          <textarea
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Add a note explaining the concern..."
-            rows={4}
-            style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--gray-300)', fontSize: '13px', resize: 'vertical' }}
-          />
-          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '16px' }}>
-            <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-            {status === 'sent' ? (
-              <span style={{ fontSize: '13px', color: '#16a34a', fontWeight: 600, alignSelf: 'center' }}>Escalation Sent</span>
-            ) : (
-              <button className="btn btn-primary" onClick={handleEscalate} disabled={status === 'sending'}
-                style={{ background: '#ef4444', borderColor: '#ef4444' }}>
-                {status === 'sending' ? 'Sending...' : status === 'error' ? 'Failed - Retry' : 'Escalate'}
-              </button>
-            )}
-          </div>
+    <div className="form-overlay" onClick={onClose}>
+      <div className="form-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px' }}>
+        <h2>Escalate -- {row.learnerName}</h2>
+        <p style={{ fontSize: '13px', color: 'var(--gray-500)', marginBottom: '12px' }}>
+          This will send an escalation email to leadership (john.sathya@zeb.co and Sivasaran.Sekaran@zeb.co) with you in CC.
+        </p>
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="Add a note explaining the concern..."
+          rows={4}
+          style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--gray-300)', fontSize: '14px', resize: 'vertical', fontFamily: 'inherit' }}
+        />
+        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '16px' }}>
+          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+          {status === 'sent' ? (
+            <span style={{ fontSize: '13px', color: '#16a34a', fontWeight: 600, alignSelf: 'center' }}>Escalation Sent</span>
+          ) : (
+            <button className="btn btn-primary" onClick={handleEscalate} disabled={status === 'sending'}
+              style={{ background: '#ef4444', borderColor: '#ef4444' }}>
+              {status === 'sending' ? 'Sending...' : status === 'error' ? 'Failed - Retry' : 'Escalate'}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -224,7 +254,11 @@ export default function ReviewingPage() {
         getAssignments(), getUsers(), getCourses(),
       ]);
 
-      const myReviewing = assignments.filter((a) => a.reviewerId === user.uid);
+      // Show learners where current user is reviewer, OR all if leadership
+      const isLeadership = user.role === 'leadership';
+      const myReviewing = isLeadership
+        ? assignments.filter((a) => a.reviewerId)
+        : assignments.filter((a) => a.reviewerId === user.uid);
       const userMap = Object.fromEntries(users.map((u) => [u.id || u.uid, u]));
       const courseMap = Object.fromEntries(courses.map((c) => [c.id, c]));
 
@@ -356,7 +390,7 @@ export default function ReviewingPage() {
                             style={{ color: alertStatus[row.key] === 'sent' ? '#16a34a' : '#ef4444', borderColor: '#ef444440', fontSize: '12px', whiteSpace: 'nowrap' }}
                             onClick={() => handleSendRiskAlert(row)}
                           >
-                            {alertStatus[row.key] === 'sending' ? 'Sending...' : alertStatus[row.key] === 'sent' ? 'Alert Sent' : 'Risk Alert'}
+                            {alertStatus[row.key] === 'sending' ? '...' : alertStatus[row.key] === 'sent' ? 'Sent' : 'Risk Alert'}
                           </button>
                           <button
                             className="btn btn-secondary btn-sm"

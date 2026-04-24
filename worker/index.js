@@ -234,10 +234,10 @@ export default {
     if (url.pathname === '/ai/feedback-scores') {
       let body;
       try { body = await request.json(); } catch { return corsResponse(new Response('Invalid JSON', { status: 400 }), corsOrigin); }
-      const { assignmentId, learnerId, courseId } = body;
+      const { assignmentId, learnerId, courseId, feedbackText } = body;
       if (!learnerId || !courseId) return corsResponse(Response.json({ ok: false, error: 'Missing learnerId or courseId' }, { status: 400 }), corsOrigin);
       try {
-        const scores = await suggestFeedbackScores({ assignmentId, learnerId, courseId }, env);
+        const scores = await suggestFeedbackScores({ assignmentId, learnerId, courseId, feedbackText }, env);
         return corsResponse(Response.json({ ok: true, scores }), corsOrigin);
       } catch (err) {
         console.error('ai/feedback-scores error:', err.message);
@@ -959,7 +959,7 @@ function buildPointsAlertEmail({ toName, courseName, points, prevPoints, status,
 
 // ─── AI Feedback Scoring ──────────────────────────────────────────────────────
 
-async function suggestFeedbackScores({ assignmentId, learnerId, courseId }, env) {
+async function suggestFeedbackScores({ assignmentId, learnerId, courseId, feedbackText }, env) {
   const token = await getGoogleAccessToken(env);
   const pid = env.FIREBASE_PROJECT_ID;
   const dbUrl = (path) => `https://${pid}-default-rtdb.firebaseio.com/${path}.json?access_token=${encodeURIComponent(token)}`;
@@ -977,19 +977,22 @@ async function suggestFeedbackScores({ assignmentId, learnerId, courseId }, env)
   const chatMsgs = assignmentId ? await r(`chats/${assignmentId}`) : null;
   const learnerMsgs = Object.values(chatMsgs || {}).filter(m => m.senderId === learnerId).length;
 
-  const context = `Learner progress summary:
+  const context = `Learner progress data:
 - Chapters completed: ${completedCount}
 - Exercises submitted: ${exerciseSubs.length}, AI-reviewed: ${aiEngaged}
 - Chat messages sent to reviewer: ${learnerMsgs}
 - Timeline score: ${pts?.timeline ?? 0}/40, AI score: ${pts?.ai ?? 0}/30
 - Current total: ${pts?.total ?? 0}/100, Status: ${pts?.status || 'unknown'}
-- Assignment status: ${assignment?.status || 'unknown'}`;
+- Assignment status: ${assignment?.status || 'unknown'}
+${feedbackText ? `\nReviewer's written feedback:\n${feedbackText}` : ''}`;
 
-  const system = `You are an AI scoring assistant for the Cortex learning platform. Based on a learner's progress data, suggest scores (integers 0-10) for four aspects:
-- Attitude: Consistency, timeliness, proactive engagement
-- Communication: Interaction quality with reviewer, responsiveness
-- Business: Understanding demonstrated in assessments and exercises
-- Technology: AI tool engagement, technical exercise quality
+  const system = `You are an AI scoring assistant for the Cortex learning platform. Based on a learner's progress data and the reviewer's written feedback, assign scores (integers 0-10) for four aspects:
+- Attitude: Consistency, timeliness, proactive engagement, willingness to learn
+- Communication: Interaction quality with reviewer, responsiveness, clarity
+- Business: Understanding demonstrated in assessments, domain knowledge
+- Technology: AI tool engagement, technical exercise quality, coding skills
+
+Weight the reviewer's written feedback heavily when provided. Use the progress data as supporting evidence.
 
 Respond ONLY with a JSON object like: {"attitude":7,"communication":6,"business":8,"technology":7}
 No explanation, no markdown, just the JSON object.`;

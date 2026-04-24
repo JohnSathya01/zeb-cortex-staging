@@ -709,12 +709,12 @@ export function DataProvider({ children }) {
     }
   }, [handlePermissionDenied]);
 
-  const getAIFeedbackScores = useCallback(async (assignmentId, learnerId, courseId) => {
+  const getAIFeedbackScores = useCallback(async (assignmentId, learnerId, courseId, feedbackText) => {
     try {
       const res = await fetch(`${WORKER_URL}/ai/feedback-scores`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assignmentId, learnerId, courseId }),
+        body: JSON.stringify({ assignmentId, learnerId, courseId, feedbackText }),
       });
       const json = await res.json();
       if (!json.ok) throw new Error(json.error || 'Failed');

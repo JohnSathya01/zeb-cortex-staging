@@ -16,9 +16,10 @@ export default function LearnerLayout() {
     if (!user?.uid) return;
     getAssignments().then((assignments) => {
       const reviewing = assignments.some((a) => a.reviewerId === user.uid);
-      setIsReviewer(reviewing);
+      // Leadership users also get the reviewing panel
+      setIsReviewer(reviewing || user.role === 'leadership');
     }).catch(() => {});
-  }, [user?.uid]);
+  }, [user?.uid, user?.role]);
 
   const handleLogout = () => { logout(); navigate('/login'); };
 
