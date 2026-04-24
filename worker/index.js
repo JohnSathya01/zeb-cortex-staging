@@ -930,8 +930,8 @@ async function calcCoursePoints({ userId, courseId, totalChapters, assignmentId,
       if (weeks.length > 0) { feedback = weeks[0][1]; reviewerDetail.source = 'weekly'; }
     }
     if (feedback) {
-      const { attitude = 0, communication = 0, business = 0, technology = 0 } = feedback;
-      reviewerDetail = { attitude, communication, business, technology, source: reviewerDetail.source };
+      const { attitude = 0, communication = 0, business = 0, technology = 0, feedbackTexts = null } = feedback;
+      reviewerDetail = { attitude, communication, business, technology, source: reviewerDetail.source, feedbackTexts };
       reviewerScore = Math.round(((attitude + communication + business + technology) / 4) * 3);
     }
   }

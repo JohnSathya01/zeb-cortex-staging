@@ -239,18 +239,23 @@ export default function CoursePointsPage() {
             <ScoreCard label="Reviewer Feedback" score={points.reviewer ?? 0} maxScore={30} minScore={0}>
               {points.reviewerDetail?.source && points.reviewerDetail.source !== 'none' ? (
                 <>
-                  <div className="pts-detail-row">
-                    <span>Attitude</span><strong>{points.reviewerDetail.attitude ?? 0}/10</strong>
-                  </div>
-                  <div className="pts-detail-row">
-                    <span>Communication</span><strong>{points.reviewerDetail.communication ?? 0}/10</strong>
-                  </div>
-                  <div className="pts-detail-row">
-                    <span>Business</span><strong>{points.reviewerDetail.business ?? 0}/10</strong>
-                  </div>
-                  <div className="pts-detail-row">
-                    <span>Technology</span><strong>{points.reviewerDetail.technology ?? 0}/10</strong>
-                  </div>
+                  {[
+                    { key: 'attitude', label: 'Attitude' },
+                    { key: 'communication', label: 'Communication' },
+                    { key: 'business', label: 'Business' },
+                    { key: 'technology', label: 'Technology' },
+                  ].map(({ key, label }) => (
+                    <div key={key}>
+                      <div className="pts-detail-row">
+                        <span>{label}</span><strong>{points.reviewerDetail[key] ?? 0}/10</strong>
+                      </div>
+                      {points.reviewerDetail.feedbackTexts?.[key] && (
+                        <p style={{ fontSize: '12px', color: 'var(--gray-500)', margin: '2px 0 8px', lineHeight: '1.4', fontStyle: 'italic' }}>
+                          "{points.reviewerDetail.feedbackTexts[key]}"
+                        </p>
+                      )}
+                    </div>
+                  ))}
                   <div className="pts-detail-row">
                     <span>Source</span><strong>{points.reviewerDetail.source === 'final' ? 'Final Review' : 'Weekly Review'}</strong>
                   </div>

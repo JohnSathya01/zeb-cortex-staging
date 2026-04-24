@@ -673,6 +673,7 @@ export function DataProvider({ children }) {
         submittedAt: new Date().toISOString(),
         overridden: isOverride,
         aiSuggested: scores.aiSuggested || null,
+        feedbackTexts: scores.feedbackTexts || null,
       };
       await set(feedbackRef, record);
       return record;
@@ -699,6 +700,7 @@ export function DataProvider({ children }) {
         submittedAt: new Date().toISOString(),
         overridden: isOverride,
         aiSuggested: scores.aiSuggested || null,
+        feedbackTexts: scores.feedbackTexts || null,
       };
       await set(feedbackRef, record);
       return record;
