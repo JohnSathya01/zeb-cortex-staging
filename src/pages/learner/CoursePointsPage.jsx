@@ -75,7 +75,7 @@ export default function CoursePointsPage() {
 
   const [points, setPoints] = useState(null);
   const [course, setCourse] = useState(null);
-  const [feedbackTexts, setFeedbackTexts] = useState(null);
+  const [allFeedback, setAllFeedback] = useState([]);
   const [loading, setLoading] = useState(true);
   const [recalcing, setRecalcing] = useState(false);
 
@@ -83,20 +83,22 @@ export default function CoursePointsPage() {
     if (user && !dataLoading) load();
   }, [user, dataLoading, courseId]);
 
-  async function loadFeedbackTexts() {
+  async function loadAllFeedback() {
     if (!assignmentId) return;
     try {
       const fb = await getReviewerFeedback(assignmentId);
-      let texts = null;
-      if (fb?.final?.feedbackTexts) {
-        texts = fb.final.feedbackTexts;
-      } else if (fb?.weekly) {
-        const weeks = Object.entries(fb.weekly).sort((a, b) => b[0].localeCompare(a[0]));
-        if (weeks.length > 0 && weeks[0][1]?.feedbackTexts) {
-          texts = weeks[0][1].feedbackTexts;
-        }
+      const list = [];
+      if (fb?.weekly) {
+        Object.entries(fb.weekly).forEach(([weekId, data]) => {
+          list.push({ ...data, weekId, type: 'Weekly Review' });
+        });
       }
-      setFeedbackTexts(texts);
+      if (fb?.final) {
+        list.push({ ...fb.final, weekId: null, type: 'Final Review' });
+      }
+      // Sort by date descending (most recent first)
+      list.sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));
+      setAllFeedback(list);
     } catch { /* ignore */ }
   }
 
@@ -111,7 +113,7 @@ export default function CoursePointsPage() {
       if (existing) {
         setPoints(existing);
         setLoading(false);
-        loadFeedbackTexts();
+        loadAllFeedback();
         // Silently recalculate in background
         if (c) {
           const fresh = await calculateCoursePoints(user.uid, courseId, c.chapters.length, assignmentId, false);
@@ -123,7 +125,7 @@ export default function CoursePointsPage() {
           const fresh = await calculateCoursePoints(user.uid, courseId, c.chapters.length, assignmentId, false);
           if (fresh) setPoints(fresh);
         }
-        loadFeedbackTexts();
+        loadAllFeedback();
         setLoading(false);
       }
     } catch {
@@ -259,23 +261,18 @@ export default function CoursePointsPage() {
             <ScoreCard label="Reviewer Feedback" score={points.reviewer ?? 0} maxScore={30} minScore={0}>
               {points.reviewerDetail?.source && points.reviewerDetail.source !== 'none' ? (
                 <>
-                  {[
-                    { key: 'attitude', label: 'Attitude' },
-                    { key: 'communication', label: 'Communication' },
-                    { key: 'business', label: 'Business' },
-                    { key: 'technology', label: 'Technology' },
-                  ].map(({ key, label }) => (
-                    <div key={key}>
-                      <div className="pts-detail-row">
-                        <span>{label}</span><strong>{points.reviewerDetail[key] ?? 0}/10</strong>
-                      </div>
-                      {(points.reviewerDetail.feedbackTexts?.[key] || feedbackTexts?.[key]) && (
-                        <p style={{ fontSize: '12px', color: 'var(--gray-500)', margin: '2px 0 8px', lineHeight: '1.4', fontStyle: 'italic' }}>
-                          "{points.reviewerDetail.feedbackTexts?.[key] || feedbackTexts[key]}"
-                        </p>
-                      )}
-                    </div>
-                  ))}
+                  <div className="pts-detail-row">
+                    <span>Attitude</span><strong>{points.reviewerDetail.attitude ?? 0}/10</strong>
+                  </div>
+                  <div className="pts-detail-row">
+                    <span>Communication</span><strong>{points.reviewerDetail.communication ?? 0}/10</strong>
+                  </div>
+                  <div className="pts-detail-row">
+                    <span>Business</span><strong>{points.reviewerDetail.business ?? 0}/10</strong>
+                  </div>
+                  <div className="pts-detail-row">
+                    <span>Technology</span><strong>{points.reviewerDetail.technology ?? 0}/10</strong>
+                  </div>
                   <div className="pts-detail-row">
                     <span>Source</span><strong>{points.reviewerDetail.source === 'final' ? 'Final Review' : 'Weekly Review'}</strong>
                   </div>
@@ -285,6 +282,44 @@ export default function CoursePointsPage() {
               )}
             </ScoreCard>
           </div>
+
+          {/* Feedback History */}
+          {allFeedback.length > 0 && (
+            <>
+              <h2 className="pts-section-title">Reviewer Feedback History</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '28px' }}>
+                {allFeedback.map((fb, i) => (
+                  <div key={i} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--gray-800)' }}>
+                        {fb.type}{fb.weekId ? ` — ${fb.weekId}` : ''}
+                      </span>
+                      {fb.submittedAt && (
+                        <span style={{ fontSize: '11px', color: 'var(--gray-400)' }}>
+                          {new Date(fb.submittedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '12px' }}>
+                      {['attitude', 'communication', 'business', 'technology'].map(key => (
+                        <div key={key} style={{ background: 'var(--gray-50)', borderRadius: '8px', padding: '10px 12px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: fb.feedbackTexts?.[key] ? '6px' : '0' }}>
+                            <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--gray-700)', textTransform: 'capitalize' }}>{key}</span>
+                            <strong style={{ fontSize: '12px', color: 'var(--gray-800)' }}>{fb[key] ?? 0}/10</strong>
+                          </div>
+                          {fb.feedbackTexts?.[key] && (
+                            <p style={{ fontSize: '12px', color: 'var(--gray-500)', margin: 0, lineHeight: '1.5', fontStyle: 'italic' }}>
+                              "{fb.feedbackTexts[key]}"
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
 
           {/* How points work */}
           <div className="pts-explainer">
