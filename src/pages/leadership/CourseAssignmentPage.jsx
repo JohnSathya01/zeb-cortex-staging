@@ -278,7 +278,14 @@ export default function CourseAssignmentPage() {
                             >
                               <option value="">No Reviewer</option>
                               {allUsers
-                                .filter((u) => u.id !== learner.id && u.uid !== learner.id)
+                                .filter((u) => {
+                                  if (u.id === learner.id || u.uid === learner.id) return false;
+                                  // Exclude users who are learners in the same course
+                                  const isLearnerInSameCourse = assignments.some(
+                                    (a) => a.learnerId === u.id && a.courseId === selectedCourseId
+                                  );
+                                  return !isLearnerInSameCourse;
+                                })
                                 .map((u) => (
                                   <option key={u.id} value={u.id}>
                                     {u.name}

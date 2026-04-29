@@ -275,6 +275,38 @@ export function DataProvider({ children }) {
         assignedAt: new Date().toISOString(),
       };
       await set(newRef, assignment);
+
+      // Auto-fix: if this new learner was a reviewer for others in the same course,
+      // reassign those to the default reviewer (Sivasaran Sekaran)
+      const existingData = snapshot.exists() ? snapshot.val() : {};
+      const conflicting = Object.entries(existingData).filter(
+        ([, a]) => a.courseId === courseId && a.reviewerId === learnerId
+      );
+      if (conflicting.length > 0) {
+        // Find Sivasaran's UID
+        const usersSnap = await get(ref(database, 'users'));
+        let defaultReviewerUid = null;
+        if (usersSnap.exists()) {
+          const usersData = usersSnap.val();
+          const siva = Object.entries(usersData).find(
+            ([, u]) => u.email && u.email.toLowerCase() === 'sivasaran.sekaran@zeb.co'
+          );
+          if (siva) defaultReviewerUid = siva[0];
+        }
+        for (const [aId, a] of conflicting) {
+          // Remove old reviewer access
+          await remove(ref(database, `reviewerAccess/${a.learnerId}/${learnerId}`));
+          if (defaultReviewerUid && defaultReviewerUid !== a.learnerId) {
+            await update(ref(database, `assignments/${aId}`), { reviewerId: defaultReviewerUid });
+            await set(ref(database, `reviewerAccess/${a.learnerId}/${defaultReviewerUid}`), true);
+            logAudit('auto_reassign_reviewer', `Auto-reassigned reviewer from ${learnerId} to Sivasaran Sekaran for assignment ${aId} (learner became same-course peer)`, aId);
+          } else {
+            await update(ref(database, `assignments/${aId}`), { reviewerId: null });
+            logAudit('auto_remove_reviewer', `Auto-removed reviewer ${learnerId} from assignment ${aId} (learner became same-course peer)`, aId);
+          }
+        }
+      }
+
       // Resolve names for audit log (best-effort)
       const [learnerSnap] = await Promise.all([get(ref(database, `users/${learnerId}`))]);
       const learnerName = learnerSnap.exists() ? learnerSnap.val().name : learnerId;
@@ -988,21 +1020,17 @@ export function DataProvider({ children }) {
         throw new Error('Cannot assign learner as their own reviewer');
       }
 
-      // Check for circular reviewer assignment: block if the proposed reviewer
-      // is already a learner in the same course and the current learner is their reviewer
+      // Block if the proposed reviewer is also a learner in the same course
       if (reviewerUid) {
         const allAssignmentsSnap = await get(ref(database, 'assignments'));
         if (allAssignmentsSnap.exists()) {
           const allAssignments = Object.values(allAssignmentsSnap.val());
-          const isCircular = allAssignments.some(
-            (a) =>
-              a.learnerId === reviewerUid &&
-              a.courseId === assignment.courseId &&
-              a.reviewerId === assignment.learnerId
+          const isLearnerInSameCourse = allAssignments.some(
+            (a) => a.learnerId === reviewerUid && a.courseId === assignment.courseId
           );
-          if (isCircular) {
+          if (isLearnerInSameCourse) {
             throw new Error(
-              'Circular reviewer assignment: this reviewer is already being reviewed by the learner in the same course.'
+              'Cannot assign a learner from the same course as a reviewer.'
             );
           }
         }
