@@ -1,14 +1,49 @@
 import { useState, useRef, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import '../styles/components.css';
 
 const WORKER_URL = import.meta.env.VITE_MAILER_URL;
+
+const PAGE_DESCRIPTIONS = {
+  '/leadership/dashboard': 'Leadership Dashboard — overview of all learners, courses, progress stats and alerts',
+  '/leadership/users': 'User Management — manage learner and leadership user accounts',
+  '/leadership/courses': 'Course Management — create and edit courses, chapters, content',
+  '/leadership/assign': 'Course Assignment — assign courses to learners, set reviewers and deadlines',
+  '/leadership/progress': 'Progress Monitoring — detailed learner progress, feedback history, chapter completion, points breakdown',
+  '/leadership/reviewers': 'Reviewer Management — manage reviewer assignments and workload',
+  '/leadership/analytics': 'Analytics Dashboard — charts and insights on learner engagement, completion rates',
+  '/leadership/cohorts': 'Cohort Management — organize learners into groups/batches',
+  '/leadership/audit': 'Audit Log — history of all actions taken on the platform',
+  '/leadership/chats': 'Chat List — view all learner-reviewer conversations',
+  '/leadership/reviewing': 'Learner Progress (Reviewer view) — review learner work and provide feedback',
+  '/leadership/review-chats': 'Review Chats — messaging between reviewers and learners',
+};
 
 const THINKING_PHRASES = [
   'Thinking…', 'Reasoning…', 'Cortexing…', 'Analyzing…',
   'Processing…', 'Consulting…', 'Synthesizing…', 'Reflecting…',
 ];
 
+function getPageContext(pathname) {
+  const pageDesc = PAGE_DESCRIPTIONS[pathname] || null;
+  // Try to capture visible page data from the main content area
+  const mainContent = document.querySelector('[class*="layout-content"], main, .page-header');
+  let visibleText = '';
+  if (mainContent) {
+    // Get text from tables, headings, stats, and key data elements
+    const elements = mainContent.querySelectorAll('h1, h2, h3, .stats-card, table, .pts-hero, .pts-score-card, .empty-state, .panel-title, .status-badge, [class*="detail"], [class*="summary"]');
+    const parts = [];
+    elements.forEach(el => {
+      const text = el.innerText?.trim();
+      if (text && text.length < 2000) parts.push(text);
+    });
+    visibleText = parts.join('\n').slice(0, 4000);
+  }
+  return { page: pageDesc || pathname, visibleData: visibleText };
+}
+
 export default function AskCortexWidget() {
+  const location = useLocation();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -46,10 +81,11 @@ export default function AskCortexWidget() {
     setPhrase(THINKING_PHRASES[0]);
 
     try {
+      const ctx = getPageContext(location.pathname);
       const res = await fetch(`${WORKER_URL}/ai/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: q, history: messages }),
+        body: JSON.stringify({ question: q, history: messages, pageContext: ctx }),
       });
       const data = await res.json();
       setMessages([...newMessages, {

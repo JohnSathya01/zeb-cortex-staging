@@ -66,10 +66,10 @@ export default {
     if (url.pathname === '/ai/ask') {
       let body;
       try { body = await request.json(); } catch { return corsResponse(new Response('Invalid JSON', { status: 400 }), corsOrigin); }
-      const { question, history = [] } = body;
+      const { question, history = [], pageContext = null } = body;
       if (!question?.trim()) return corsResponse(Response.json({ ok: false, error: 'No question provided' }, { status: 400 }), corsOrigin);
       try {
-        const answer = await askCortex({ question, history }, env);
+        const answer = await askCortex({ question, history, pageContext }, env);
         return corsResponse(Response.json({ ok: true, answer }), corsOrigin);
       } catch (err) {
         console.error('ai/ask error:', err.message);
@@ -742,14 +742,34 @@ function hex(bytes) {
 
 // ─── Cloudflare Workers AI — Ask Cortex (General Q&A) ────────────────────────
 
-async function askCortex({ question, history }, env) {
-  const messages = [
-    {
-      role: 'system',
-      content: `You are Cortex AI, an intelligent assistant embedded in Zeb's Cortex learning management platform. \
+async function askCortex({ question, history, pageContext }, env) {
+  let systemPrompt = `You are Cortex AI, an intelligent assistant embedded in Zeb's Cortex learning management platform. \
 You help leadership with course design, learner strategy, training content, and platform questions. \
-Be concise, practical, and helpful. Keep answers focused — 2-5 sentences unless more detail is clearly needed.`,
-    },
+Be concise, practical, and helpful. Keep answers focused — 2-5 sentences unless more detail is clearly needed.
+
+The Cortex platform has these sections:
+- Dashboard: Overview of all learners, courses, and alerts
+- User Management: Add/edit learner and leadership accounts
+- Course Management: Create courses with chapters, assessments, exercises
+- Course Assignment: Assign courses to learners, set reviewers and deadlines
+- Progress Monitoring: Track learner progress, points (Timeline/AI Engagement/Reviewer Feedback), feedback history
+- Reviewer Management: Assign reviewers to learners
+- Analytics: Charts on completion rates, engagement
+- Cohorts: Group learners into batches
+- Audit Log: History of all platform actions
+- Review Chats: Messaging between reviewers and learners
+
+Points system: Total out of 100. Timeline Adherence (max 40), AI Engagement (max 30), Reviewer Feedback (max 30). SLA minimum is 80. Status: On Track (>=80), At Risk (>=60), Critical (<60).`;
+
+  if (pageContext?.page) {
+    systemPrompt += `\n\nThe user is currently on: ${pageContext.page}`;
+  }
+  if (pageContext?.visibleData) {
+    systemPrompt += `\n\nData currently visible on the page:\n${pageContext.visibleData}`;
+  }
+
+  const messages = [
+    { role: 'system', content: systemPrompt },
     ...history.slice(-8).map((m) => ({ role: m.role, content: m.content })),
     { role: 'user', content: question },
   ];
