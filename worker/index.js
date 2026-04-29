@@ -743,30 +743,72 @@ function hex(bytes) {
 // ─── Cloudflare Workers AI — Ask Cortex (General Q&A) ────────────────────────
 
 async function askCortex({ question, history, pageContext }, env) {
+  // Fetch live data from Firebase
+  const token = await getGoogleAccessToken(env);
+  const pid = env.FIREBASE_PROJECT_ID;
+  const r = async (path) => {
+    const res = await fetch(`https://${pid}-default-rtdb.firebaseio.com/${path}.json?access_token=${encodeURIComponent(token)}`);
+    const d = await res.json();
+    return (d && typeof d === 'object' && d.error) ? null : d;
+  };
+
+  const [usersData, coursesData, assignmentsData, coursePointsData] = await Promise.all([
+    r('users'), r('courses'), r('assignments'), r('coursePoints'),
+  ]);
+
+  // Build concise data summaries
+  const users = usersData ? Object.entries(usersData).map(([id, u]) => ({
+    id, name: u.name, email: u.email, role: u.role, specialisation: u.specialisation || '',
+  })) : [];
+
+  const courses = coursesData ? Object.entries(coursesData).map(([id, c]) => ({
+    id, title: c.title, chapters: c.chapters?.length || 0,
+  })) : [];
+
+  const assignments = assignmentsData ? Object.entries(assignmentsData).map(([id, a]) => {
+    const learner = users.find(u => u.id === a.learnerId);
+    const reviewer = users.find(u => u.id === a.reviewerId);
+    const course = courses.find(c => c.id === a.courseId);
+    return {
+      id, learner: learner?.name || a.learnerId, course: course?.title || a.courseId,
+      status: a.status, reviewer: reviewer?.name || a.reviewerId || 'None',
+      dueDate: a.targetCompletionDate || 'None',
+    };
+  }) : [];
+
+  const points = [];
+  if (coursePointsData) {
+    for (const [userId, coursePts] of Object.entries(coursePointsData)) {
+      const learner = users.find(u => u.id === userId);
+      for (const [courseId, p] of Object.entries(coursePts)) {
+        const course = courses.find(c => c.id === courseId);
+        points.push({
+          learner: learner?.name || userId, course: course?.title || courseId,
+          total: p.total, status: p.status,
+          timeline: p.timeline, ai: p.ai, reviewer: p.reviewer,
+        });
+      }
+    }
+  }
+
+  let dataContext = `\n\n=== LIVE PLATFORM DATA ===\n`;
+  dataContext += `\nUSERS (${users.length}):\n${users.map(u => `- ${u.name} | ${u.email} | ${u.role} | ${u.specialisation}`).join('\n')}`;
+  dataContext += `\n\nCOURSES (${courses.length}):\n${courses.map(c => `- ${c.title} (${c.chapters} chapters)`).join('\n')}`;
+  dataContext += `\n\nASSIGNMENTS (${assignments.length}):\n${assignments.map(a => `- ${a.learner} → ${a.course} | Status: ${a.status} | Reviewer: ${a.reviewer} | Due: ${a.dueDate}`).join('\n')}`;
+  dataContext += `\n\nPOINTS:\n${points.map(p => `- ${p.learner} → ${p.course} | Total: ${p.total}/100 (${p.status}) | T:${p.timeline} AI:${p.ai} F:${p.reviewer}`).join('\n')}`;
+
   let systemPrompt = `You are Cortex AI, an intelligent assistant embedded in Zeb's Cortex learning management platform. \
-You help leadership with course design, learner strategy, training content, and platform questions. \
+You have FULL ACCESS to all platform data. Answer questions accurately using the live data provided below. \
 Be concise, practical, and helpful. Keep answers focused — 2-5 sentences unless more detail is clearly needed.
 
-The Cortex platform has these sections:
-- Dashboard: Overview of all learners, courses, and alerts
-- User Management: Add/edit learner and leadership accounts
-- Course Management: Create courses with chapters, assessments, exercises
-- Course Assignment: Assign courses to learners, set reviewers and deadlines
-- Progress Monitoring: Track learner progress, points (Timeline/AI Engagement/Reviewer Feedback), feedback history
-- Reviewer Management: Assign reviewers to learners
-- Analytics: Charts on completion rates, engagement
-- Cohorts: Group learners into batches
-- Audit Log: History of all platform actions
-- Review Chats: Messaging between reviewers and learners
+Platform sections: Dashboard, User Management, Course Management, Course Assignment, Progress Monitoring, Reviewer Management, Analytics, Cohorts, Audit Log, Review Chats.
 
 Points system: Total out of 100. Timeline Adherence (max 40), AI Engagement (max 30), Reviewer Feedback (max 30). SLA minimum is 80. Status: On Track (>=80), At Risk (>=60), Critical (<60).`;
 
   if (pageContext?.page) {
-    systemPrompt += `\n\nThe user is currently on: ${pageContext.page}`;
+    systemPrompt += `\n\nThe user is currently viewing: ${pageContext.page}`;
   }
-  if (pageContext?.visibleData) {
-    systemPrompt += `\n\nData currently visible on the page:\n${pageContext.visibleData}`;
-  }
+  systemPrompt += dataContext;
 
   const messages = [
     { role: 'system', content: systemPrompt },
