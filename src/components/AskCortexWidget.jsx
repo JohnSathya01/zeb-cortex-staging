@@ -19,6 +19,61 @@ const PAGE_DESCRIPTIONS = {
   '/leadership/review-chats': 'Review Chats — messaging between reviewers and learners',
 };
 
+const PAGE_SUGGESTIONS = {
+  '/leadership/dashboard': [
+    'Summarize the overall learner status',
+    'Who needs immediate attention?',
+    'What are the key risks right now?',
+  ],
+  '/leadership/users': [
+    'How many learners are there?',
+    'What roles exist on this platform?',
+  ],
+  '/leadership/courses': [
+    'What courses are available?',
+    'How do I create a new course?',
+  ],
+  '/leadership/assign': [
+    'Which learners are unassigned?',
+    'Who has overdue deadlines?',
+    'How does reviewer assignment work?',
+  ],
+  '/leadership/progress': [
+    'Who is at critical status?',
+    'Summarize this learner\'s performance',
+    'What feedback has been given?',
+    'Who is behind schedule?',
+  ],
+  '/leadership/reviewing': [
+    'Summarize this learner\'s progress',
+    'What areas need improvement?',
+    'Describe the feedback scores',
+  ],
+  '/leadership/analytics': [
+    'What are the key trends?',
+    'Which courses have low completion?',
+    'Summarize engagement metrics',
+  ],
+  '/leadership/cohorts': [
+    'How are cohorts organized?',
+    'What is the purpose of cohorts?',
+  ],
+  '/leadership/audit': [
+    'What recent actions were taken?',
+    'Who made changes recently?',
+  ],
+  '/leadership/reviewers': [
+    'Which reviewers have the most learners?',
+    'How does reviewer assignment work?',
+  ],
+};
+
+const DEFAULT_SUGGESTIONS = [
+  'What does this page show?',
+  'How does the points system work?',
+  'What is the SLA requirement?',
+];
+
 const THINKING_PHRASES = [
   'Thinking…', 'Reasoning…', 'Cortexing…', 'Analyzing…',
   'Processing…', 'Consulting…', 'Synthesizing…', 'Reflecting…',
@@ -26,18 +81,14 @@ const THINKING_PHRASES = [
 
 function getPageContext(pathname) {
   const pageDesc = PAGE_DESCRIPTIONS[pathname] || null;
-  // Try to capture visible page data from the main content area
-  const mainContent = document.querySelector('[class*="layout-content"], main, .page-header');
+  // Capture visible page data from the main content area
+  const mainContent = document.querySelector('main.main-content');
   let visibleText = '';
   if (mainContent) {
-    // Get text from tables, headings, stats, and key data elements
-    const elements = mainContent.querySelectorAll('h1, h2, h3, .stats-card, table, .pts-hero, .pts-score-card, .empty-state, .panel-title, .status-badge, [class*="detail"], [class*="summary"]');
-    const parts = [];
-    elements.forEach(el => {
-      const text = el.innerText?.trim();
-      if (text && text.length < 2000) parts.push(text);
-    });
-    visibleText = parts.join('\n').slice(0, 4000);
+    // Get all meaningful text content
+    const text = mainContent.innerText || '';
+    // Take first 4000 chars to stay within token limits
+    visibleText = text.slice(0, 4000);
   }
   return { page: pageDesc || pathname, visibleData: visibleText };
 }
@@ -52,6 +103,11 @@ export default function AskCortexWidget() {
   const phraseRef = useRef(null);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
+
+  // Reset messages when page changes
+  useEffect(() => {
+    setMessages([]);
+  }, [location.pathname]);
 
   useEffect(() => {
     if (!loading) return;
@@ -71,10 +127,9 @@ export default function AskCortexWidget() {
     if (open) setTimeout(() => textareaRef.current?.focus(), 150);
   }, [open]);
 
-  async function handleSend() {
-    const q = input.trim();
-    if (!q || loading) return;
-    const newMessages = [...messages, { role: 'user', content: q }];
+  async function sendQuestion(q) {
+    if (!q?.trim() || loading) return;
+    const newMessages = [...messages, { role: 'user', content: q.trim() }];
     setMessages(newMessages);
     setInput('');
     setLoading(true);
@@ -85,7 +140,7 @@ export default function AskCortexWidget() {
       const res = await fetch(`${WORKER_URL}/ai/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: q, history: messages, pageContext: ctx }),
+        body: JSON.stringify({ question: q.trim(), history: messages, pageContext: ctx }),
       });
       const data = await res.json();
       setMessages([...newMessages, {
@@ -99,12 +154,18 @@ export default function AskCortexWidget() {
     }
   }
 
+  function handleSend() {
+    sendQuestion(input);
+  }
+
   function handleKeyDown(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
   }
+
+  const suggestions = PAGE_SUGGESTIONS[location.pathname] || DEFAULT_SUGGESTIONS;
 
   return (
     <>
@@ -131,7 +192,19 @@ export default function AskCortexWidget() {
             {messages.length === 0 && (
               <div className="ask-cortex-empty">
                 <span className="ask-cortex-empty-icon">✦</span>
-                <p>Ask me anything about courses, learners, or training strategy.</p>
+                <p>Ask me anything about this page, learners, or training strategy.</p>
+                <div className="ask-cortex-suggestions">
+                  {suggestions.map((s, i) => (
+                    <button
+                      key={i}
+                      className="ask-cortex-suggestion"
+                      onClick={() => sendQuestion(s)}
+                      disabled={loading}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
             {messages.map((m, i) => (
