@@ -791,24 +791,30 @@ async function askCortex({ question, history, pageContext }, env) {
     }
   }
 
-  let dataContext = `\n\n=== LIVE PLATFORM DATA ===\n`;
-  dataContext += `\nUSERS (${users.length}):\n${users.map(u => `- ${u.name} | ${u.email} | ${u.role} | ${u.specialisation}`).join('\n')}`;
-  dataContext += `\n\nCOURSES (${courses.length}):\n${courses.map(c => `- ${c.title} (${c.chapters} chapters)`).join('\n')}`;
-  dataContext += `\n\nASSIGNMENTS (${assignments.length}):\n${assignments.map(a => `- ${a.learner} → ${a.course} | Status: ${a.status} | Reviewer: ${a.reviewer} | Due: ${a.dueDate}`).join('\n')}`;
-  dataContext += `\n\nPOINTS:\n${points.map(p => `- ${p.learner} → ${p.course} | Total: ${p.total}/100 (${p.status}) | T:${p.timeline} AI:${p.ai} F:${p.reviewer}`).join('\n')}`;
+  let systemPrompt = `You are Cortex AI, an intelligent assistant for Zeb's Cortex learning platform with FULL READ ACCESS to all data.
 
-  let systemPrompt = `You are Cortex AI, an intelligent assistant embedded in Zeb's Cortex learning management platform. \
-You have FULL ACCESS to all platform data. Answer questions accurately using the live data provided below. \
-Be concise, practical, and helpful. Keep answers focused — 2-5 sentences unless more detail is clearly needed.
+CRITICAL: You must answer questions using ONLY the real data provided below. Do NOT say data is unavailable when it's clearly listed.
 
-Platform sections: Dashboard, User Management, Course Management, Course Assignment, Progress Monitoring, Reviewer Management, Analytics, Cohorts, Audit Log, Review Chats.
+=== LIVE PLATFORM DATA (as of ${new Date().toISOString()}) ===
 
-Points system: Total out of 100. Timeline Adherence (max 40), AI Engagement (max 30), Reviewer Feedback (max 30). SLA minimum is 80. Status: On Track (>=80), At Risk (>=60), Critical (<60).`;
+USERS IN SYSTEM: ${users.length} total
+${users.map((u, i) => `${i + 1}. ${u.name} (${u.email}) - Role: ${u.role}, Specialization: ${u.specialisation || 'None'}`).join('\n')}
+
+COURSES IN SYSTEM: ${courses.length} total
+${courses.map((c, i) => `${i + 1}. "${c.title}" - ${c.chapters} chapters`).join('\n')}
+
+COURSE ASSIGNMENTS: ${assignments.length} total
+${assignments.map((a, i) => `${i + 1}. ${a.learner} enrolled in "${a.course}" | Status: ${a.status} | Reviewer: ${a.reviewer} | Due: ${a.dueDate}`).join('\n')}
+
+LEARNER POINTS: ${points.length} records
+${points.map((p, i) => `${i + 1}. ${p.learner} in "${p.course}": ${p.total}/100 pts (${p.status}) | Timeline: ${p.timeline}, AI: ${p.ai}, Feedback: ${p.reviewer}`).join('\n')}
+
+Platform info: SLA minimum is 80 points. Status levels: On Track (≥80), At Risk (≥60), Critical (<60). Points breakdown: Timeline (max 40), AI Engagement (max 30), Reviewer Feedback (max 30).`;
 
   if (pageContext?.page) {
-    systemPrompt += `\n\nThe user is currently viewing: ${pageContext.page}`;
+    systemPrompt += `\n\nUSER IS VIEWING: ${pageContext.page}`;
   }
-  systemPrompt += dataContext;
+  systemPrompt += `\n\nAnswer the user's question using the data above. Be specific and cite actual names/numbers.`;
 
   const messages = [
     { role: 'system', content: systemPrompt },
