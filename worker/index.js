@@ -752,8 +752,8 @@ async function askCortex({ question, history, pageContext }, env) {
     return (d && typeof d === 'object' && d.error) ? null : d;
   };
 
-  const [usersData, coursesData, assignmentsData, coursePointsData] = await Promise.all([
-    r('users'), r('courses'), r('assignments'), r('coursePoints'),
+  const [usersData, assignmentsData, coursePointsData] = await Promise.all([
+    r('users'), r('assignments'), r('coursePoints'),
   ]);
 
   // Build concise data summaries
@@ -761,9 +761,11 @@ async function askCortex({ question, history, pageContext }, env) {
     id, name: u.name, email: u.email, role: u.role, specialisation: u.specialisation || '',
   })) : [];
 
-  const courses = coursesData ? Object.entries(coursesData).map(([id, c]) => ({
-    id, title: c.title, chapters: c.chapters?.length || 0,
-  })) : [];
+  // Courses are static (from courses.json in the repo, not Firebase)
+  const courses = [
+    { id: 'neural-machine-translation', title: 'Neural Machine Translation', chapters: 13 },
+    { id: 'the-gpu-story', title: 'The GPU Story', chapters: 13 },
+  ];
 
   const assignments = assignmentsData ? Object.entries(assignmentsData).map(([id, a]) => {
     const learner = users.find(u => u.id === a.learnerId);
