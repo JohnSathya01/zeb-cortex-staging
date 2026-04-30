@@ -815,7 +815,7 @@ Points system: Total out of 100. Timeline Adherence (max 40), AI Engagement (max
     ...history.slice(-8).map((m) => ({ role: m.role, content: m.content })),
     { role: 'user', content: question },
   ];
-  const result = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', { max_tokens: 1024, messages });
+  const result = await env.AI.run('@cf/meta/llama-3.1-70b-instruct', { max_tokens: 1024, messages });
   return result.response;
 }
 
